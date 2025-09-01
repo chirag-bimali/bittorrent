@@ -26,10 +26,10 @@ if (args[2] === "decode") {
     console.error("Logs from your program will appear here!");
 
     // Uncomment this block to pass the first stage
-    // try {
-    //     const decoded = decodeBencode(bencodedValue);
-    //     console.log(JSON.stringify(decoded));
-    // } catch (error) {
-    //     console.error(error.message);
-    // }
+    try {
+        const decoded = decodeBencode(bencodedValue);
+        console.log(JSON.stringify(decoded));
+    } catch (error) {
+        console.error(error.message);
+    }
 }
