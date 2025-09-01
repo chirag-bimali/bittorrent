@@ -2,14 +2,11 @@
 // - decodeBencode("5:hello") -> "hello"
 // - decodeBencode("10:hello12345") -> "hello12345"
 
-function decodeBencode(bencodedValue: string): string {
-
-  // Check if integer
-  const firstCharacter = bencodedValue[0];
-  const lastCharacter = bencodedValue[bencodedValue.length - 1];
-  if (firstCharacter === "i" && lastCharacter === "e") {
-    const valueString = bencodedValue.substring(1, bencodedValue.length - 1);
-    if (isNaN(parseInt(valueString)))
+function decodeBencode(bencodedValue: string): string | number {
+  // Check integer
+  if (bencodedValue.startsWith("i") && bencodedValue.endsWith("e")) {
+    const valueString = parseInt(bencodedValue.slice(1, -1));
+    if (isNaN(valueString))
       throw new Error(`Invalid encoded value ${valueString}`);
     return valueString;
   }
@@ -22,11 +19,9 @@ function decodeBencode(bencodedValue: string): string {
     if (firstColonIndex === -1) {
       throw new Error("Invalid encoded value");
     }
-    return JSON.stringify(bencodedValue.substring(
-      firstColonIndex + 1,
-      firstColonIndex + 1 + stringLength
-    ));
+    return JSON.stringify(bencodedValue.substring(firstColonIndex + 1));
   }
+  throw new Error("Only string and number are supported for now");
 }
 
 const args = process.argv;
@@ -39,7 +34,7 @@ if (args[2] === "decode") {
   // Uncomment this block to pass the first stage
   try {
     const decoded = decodeBencode(bencodedValue);
-    console.log(decoded)
+    console.log(decoded);
     // console.log(JSON.stringify(decoded));
   } catch (error) {
     console.error(error.message);
