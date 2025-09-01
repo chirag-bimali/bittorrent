@@ -39,7 +39,8 @@ if (args[2] === "decode") {
   // Uncomment this block to pass the first stage
   try {
     const decoded = decodeBencode(bencodedValue);
-    console.log(JSON.stringify(decoded));
+    // console.log(JSON.stringify(decoded));
+    console.log(decoded);
   } catch (error) {
     console.error(error.message);
   }
