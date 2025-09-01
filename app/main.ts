@@ -22,10 +22,10 @@ function decodeBencode(bencodedValue: string): string {
     if (firstColonIndex === -1) {
       throw new Error("Invalid encoded value");
     }
-    return bencodedValue.substring(
+    return JSON.stringify(bencodedValue.substring(
       firstColonIndex + 1,
       firstColonIndex + 1 + stringLength
-    );
+    ));
   }
 }
 
@@ -39,8 +39,8 @@ if (args[2] === "decode") {
   // Uncomment this block to pass the first stage
   try {
     const decoded = decodeBencode(bencodedValue);
+    console.log(decoded)
     // console.log(JSON.stringify(decoded));
-    console.log(decoded);
   } catch (error) {
     console.error(error.message);
   }
