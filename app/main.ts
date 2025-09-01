@@ -1,35 +1,46 @@
 // Examples:
 // - decodeBencode("5:hello") -> "hello"
 // - decodeBencode("10:hello12345") -> "hello12345"
-function decodeBencode(bencodedValue: string): string {
-    /* This function is used to decode a bencoded string
-    The bencoded string is a string that is prefixed by the length of the string
-    **/
 
-    // Check if the first character is a digit
-    if (!isNaN(parseInt(bencodedValue[0]))) {
-        const firstColonIndex = bencodedValue.indexOf(":");
-        if (firstColonIndex === -1) {
-            throw new Error("Invalid encoded value");
-        }
-        return bencodedValue.substring(firstColonIndex + 1);
-    } else {
-        throw new Error("Only strings are supported at the moment");
+function decodeBencode(bencodedValue: string): string {
+
+  // Check if integer
+  const firstCharacter = bencodedValue[0];
+  const lastCharacter = bencodedValue[bencodedValue.length - 1];
+  if (firstCharacter === "i" && lastCharacter === "e") {
+    const valueString = bencodedValue.substring(1, bencodedValue.length - 1);
+    if (isNaN(parseInt(valueString)))
+      throw new Error(`Invalid encoded value ${valueString}`);
+    return valueString;
+  }
+
+  // Check for strings
+  const firstColonIndex = bencodedValue.indexOf(":");
+  const stringLength = parseInt(bencodedValue.substring(0, firstColonIndex));
+
+  if (!isNaN(stringLength)) {
+    if (firstColonIndex === -1) {
+      throw new Error("Invalid encoded value");
     }
+    return bencodedValue.substring(
+      firstColonIndex + 1,
+      firstColonIndex + 1 + stringLength
+    );
+  }
 }
 
 const args = process.argv;
 const bencodedValue = args[3];
 
 if (args[2] === "decode") {
-    // You can use print statements as follows for debugging, they'll be visible when running tests.
-    console.error("Logs from your program will appear here!");
+  // You can use print statements as follows for debugging, they'll be visible when running tests.
+  console.error("Logs from your program will appear here!");
 
-    // Uncomment this block to pass the first stage
-    try {
-        const decoded = decodeBencode(bencodedValue);
-        console.log(JSON.stringify(decoded));
-    } catch (error) {
-        console.error(error.message);
-    }
+  // Uncomment this block to pass the first stage
+  try {
+    const decoded = decodeBencode(bencodedValue);
+    console.log(JSON.stringify(decoded));
+  } catch (error) {
+    console.error(error.message);
+  }
 }
