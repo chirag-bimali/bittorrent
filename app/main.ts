@@ -1,8 +1,4 @@
-// Examples:
-
-// - decodeBencode("5:hello") -> "hello"
-
-// - decodeBencode("10:hello12345") -> "hello12345"
+const fs = require("fs");
 
 type Dictionary = { [key: string]: any };
 
@@ -68,7 +64,6 @@ function decodeBencodeList(bencodedValue: string): [Array<any>, number] {
         arrayBuffer.push(value);
 
         valueString = valueString.substring(decodedNumberLength);
-        console.log(valueString);
 
         decodedLength += decodedNumberLength;
 
@@ -117,7 +112,7 @@ function decodeBencodeList(bencodedValue: string): [Array<any>, number] {
 function decodeBencodeDictonary(bencodedValue: string): [Dictionary, number] {
   // d3:cow3:moo4:spam4:eggse
 
-  console.log(bencodedValue)
+  console.log(bencodedValue);
   const dictonaryBuffer: Dictionary = {};
   let valueString = bencodedValue.slice(1);
   let decodedLength = 1;
@@ -204,9 +199,15 @@ if (args[2] === "decode") {
   // Uncomment this block to pass the first stage
 
   try {
-    const decoded = decodeBencode(bencodedValue);
-
-    console.log(decoded);
+    if (args[3] === "-f") {
+      const torrentData = fs.readFileSync(args[4]);
+      const torrentString = torrentData.toString("binary");
+      const decoded = decodeBencode(torrentString);
+      console.log(decoded);
+    } else {
+      const decoded = decodeBencode(bencodedValue);
+      console.log(decoded);
+    }
 
     // console.log(JSON.stringify(decoded));
   } catch (error) {
