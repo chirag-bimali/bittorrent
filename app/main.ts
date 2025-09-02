@@ -1,4 +1,5 @@
 const fs = require("fs");
+const crypto = require("crypto");
 
 type Dictionary = { [key: string]: any };
 
@@ -112,7 +113,6 @@ function decodeBencodeList(bencodedValue: string): [Array<any>, number] {
 function decodeBencodeDictonary(bencodedValue: string): [Dictionary, number] {
   // d3:cow3:moo4:spam4:eggse
 
-  console.log(bencodedValue);
   const dictonaryBuffer: Dictionary = {};
   let valueString = bencodedValue.slice(1);
   let decodedLength = 1;
@@ -187,6 +187,54 @@ function decodeBencode(
   return value;
 }
 
+function bencodeInteger(integer: number): string {
+  return `i${integer}e`;
+}
+function bencodeString(str: string): string {
+  return `${str.length}:${str}`;
+}
+
+function bencodeList(array: Array<any>): string {
+  let value = "l";
+  for (const item of array) {
+    if (typeof item === "string") {
+      value += bencodeString(item);
+      continue;
+    } else if (typeof item == "number") {
+      value += bencodeInteger(item);
+    } else if (Array.isArray(item)) {
+      value += bencodeList(item);
+    } else if (typeof item === "object" && item !== null) {
+      value += bencodeDictonary(item);
+    }
+  }
+  return value + "e";
+}
+
+function bencodeDictonary(obj: Dictionary): string {
+  let value = "d";
+  const sortedKeys = Object.keys(obj).sort();
+  for (const key of sortedKeys) {
+    value += bencodeString(key);
+
+    const val = obj[key];
+    if (typeof val === "string") {
+      value += bencodeString(val);
+    } else if (typeof val === "number") {
+      value += bencodeInteger(val);
+    } else if (Array.isArray(val)) {
+      value += bencodeList(val);
+    } else if (typeof val === "object" && val !== null) {
+      value += bencodeDictonary(val);
+    }
+  }
+  return value + "e";
+}
+
+function calculateSHA1(data: string): string {
+  return crypto.createHash("sha1").update(data, "binary").digest("hex");
+}
+
 const args = process.argv;
 
 const bencodedValue = args[3];
@@ -199,18 +247,26 @@ if (args[2] === "decode") {
   // Uncomment this block to pass the first stage
 
   try {
-    if (args[3] === "-f") {
-      const torrentData = fs.readFileSync(args[4]);
-      const torrentString = torrentData.toString("binary");
-      const decoded = decodeBencode(torrentString);
-      console.log(decoded);
-    } else {
-      const decoded = decodeBencode(bencodedValue);
-      console.log(decoded);
-    }
+    const decoded = decodeBencode(bencodedValue);
+    console.log(decoded);
 
     // console.log(JSON.stringify(decoded));
-  } catch (error) {
+  } catch (error: any) {
+    console.error(error.message);
+  }
+}
+
+if (args[2] === "info") {
+  try {
+    const torrentData = fs.readFileSync(args[3]);
+    const torrentString = torrentData.toString("binary");
+    const decoded: any = decodeBencode(torrentString);
+    console.log(`Tracker URL: ${decoded.announce}`);
+    console.log(`Length: ${decoded.info.length}`);
+    const encodedInfo = bencodeDictonary(decoded.info);
+    const infoHash = calculateSHA1(encodedInfo);
+    console.log(`Info Hash: ${infoHash}`);
+  } catch (error: any) {
     console.error(error.message);
   }
 }
