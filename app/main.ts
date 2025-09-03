@@ -266,7 +266,27 @@ if (args[2] === "info") {
     const encodedInfo = bencodeDictonary(decoded.info);
     const infoHash = calculateSHA1(encodedInfo);
     console.log(`Info Hash: ${infoHash}`);
+    console.log(`Piece Length: ${decoded.info["piece length"]}`);
+
+    const pieces = decoded.info.pieces;
+
+    const pieceLength = 20;
+
+    console.log("Piece Hashes");
+
+    for (let i = 0; i < pieces.length; i += pieceLength) {
+      const pieceHash = pieces.substring(i, i + pieceLength);
+
+      const hexHash = Array.from<string>(pieceHash)
+        .map((char) => char.charCodeAt(0).toString(16).padStart(2, "0"))
+        .join("");
+
+      console.log(hexHash);
+    }
+
   } catch (error: any) {
     console.error(error.message);
   }
 }
+
+
