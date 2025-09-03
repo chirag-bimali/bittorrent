@@ -1,5 +1,6 @@
 const fs = require("fs");
 const crypto = require("crypto");
+const net = require("net");
 
 type Dictionary = { [key: string]: any };
 
@@ -261,9 +262,6 @@ function decodePeersIp(buf: Buffer): [Array<number>, number][] {
   const splitSequence = 6;
   for (let i = 0; i < buf.length; i += splitSequence) {
     const ip: Array<number> = [buf[i], buf[i + 1], buf[i + 2], buf[i + 3]];
-    // for (let j = 0; j < 4; j++) {
-    //   ip.push(buf[i + j]);
-    // }
     const port = (buf[i + 4] << 8) | buf[i + 5];
 
     peersIp.push([ip, port]);
@@ -324,6 +322,54 @@ function percentEncodeBuffer(buf: Buffer): string {
     .join("");
 }
 
+async function discoverPeers(
+  bencodedValue: string
+): Promise<[Array<number>, number][]> {
+  const decoded: any = decodeBencode(bencodedValue);
+  const encodedInfo = bencodeDictonary(decoded.info);
+
+  let totalFileSize = 0;
+
+  if (decoded.info.files) {
+    // Multi-file torrent
+    for (const file of decoded.info.files) {
+      totalFileSize += file.length;
+    }
+  }
+  // Single file torrent
+  else totalFileSize = decoded.info.length;
+
+  const infoHash = crypto
+    .createHash("sha1")
+    .update(encodedInfo, "binary")
+    .digest();
+  const peerId = generateId(20);
+
+  const infoHashEscaped = percentEncodeBuffer(infoHash);
+  const peerIdEscaped = percentEncodeBuffer(peerId);
+
+  const params = {
+    port: `${6881}`,
+    uploaded: `${0}`,
+    downloaded: `${0}`,
+    left: `${totalFileSize}`,
+    compact: `${1}`,
+  };
+
+  const paramString = new URLSearchParams(params).toString();
+  const url = `${decoded.announce}?info_hash=${infoHashEscaped}&peer_id=${peerIdEscaped}&${paramString}`;
+  const response = await fetch(url, { method: "GET" });
+  const arrayBuf = await response.arrayBuffer();
+  const responseString = String.fromCharCode(...new Uint8Array(arrayBuf));
+
+  const trackerResponse: any = decodeBencode(responseString);
+  const peersField = trackerResponse.peers;
+  const peersBuf = Buffer.from(peersField);
+  const peersIp = decodePeersIp(peersBuf);
+
+  return peersIp;
+}
+
 if (args[2] === "peers") {
   try {
     const torrentData = fs.readFileSync(args[3]);
@@ -379,6 +425,50 @@ if (args[2] === "peers") {
           console.log(`${item[0].join(".")}:${item[1]}`);
         }
       });
+  } catch (error: any) {
+    console.error(error.message);
+  }
+}
+
+if (args[2] === "handshake") {
+  try {
+    const torrentFileLocation = args[3];
+    const torrentData = fs.readFileSync(torrentFileLocation);
+    const torrentString = torrentData.toString("binary");
+    if (args[4] === undefined) {
+      throw new Error(`Please specify peer ip and peer port in ip:port format to handshake
+eg: bittorrent handshake sample.torrent 192.168.1.1:53439`);
+    }
+    const [peerIp, peerPortString] = args[4].split(":");
+    const peerPort = parseInt(peerPortString);
+    (async function () {
+      const peersIp = await discoverPeers(torrentString);
+      let found = false;
+      for (const item of peersIp) {
+        if (peerIp === item[0].join(".") && peerPort === item[1]) {
+          found = true;
+          break;
+        }
+      }
+      console.log(`Connecting to ${peerIp}:${peerPort}`);
+      const client = net.createConnection(
+        { port: peerPort, host: peerIp },
+        () => {
+          console.log("Connected to server, sending handshake...");
+          client.write("....");
+        }
+      );
+      client.on("timeout", () => {
+        console.error(`Connection timed out`);
+        client.end();
+      })
+      client.on("data", (data: any) => {
+        console.log(`Handshake response from server: `);
+        console.log(data);
+      });
+    })();
+
+    const decoded = decodeBencode(torrentString);
   } catch (error: any) {
     console.error(error.message);
   }
