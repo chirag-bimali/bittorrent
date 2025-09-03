@@ -231,8 +231,44 @@ function bencodeDictonary(obj: Dictionary): string {
   return value + "e";
 }
 
-function calculateSHA1(data: string): string {
+function calculateSHA1IntoHex(data: string): string {
   return crypto.createHash("sha1").update(data, "binary").digest("hex");
+}
+
+function extractPieceHashesInHex(
+  pieces: string,
+  pieceLength: number = 20
+): string[] {
+  const hexHashArray: string[] = [];
+
+  for (let i = 0; i < pieces.length; i += pieceLength) {
+    const pieceHash = pieces.substring(i, i + pieceLength);
+
+    const hexHash = Array.from<string>(pieceHash)
+      .map((char) => char.charCodeAt(0).toString(16).padStart(2, "0"))
+      .join("");
+    hexHashArray.push(hexHash);
+  }
+  return hexHashArray;
+}
+
+function generateId(length: number = 20): Buffer {
+  return crypto.randomBytes(20); // secure random numbers
+}
+
+function decodePeersIp(buf: Buffer): [Array<number>, number][] {
+  const peersIp: [number[], number][] = [];
+  const splitSequence = 6;
+  for (let i = 0; i < buf.length; i += splitSequence) {
+    const ip: Array<number> = [buf[i], buf[i + 1], buf[i + 2], buf[i + 3]];
+    // for (let j = 0; j < 4; j++) {
+    //   ip.push(buf[i + j]);
+    // }
+    const port = (buf[i + 4] << 8) | buf[i + 5];
+
+    peersIp.push([ip, port]);
+  }
+  return peersIp;
 }
 
 const args = process.argv;
@@ -264,7 +300,7 @@ if (args[2] === "info") {
     console.log(`Tracker URL: ${decoded.announce}`);
     console.log(`Length: ${decoded.info.length}`);
     const encodedInfo = bencodeDictonary(decoded.info);
-    const infoHash = calculateSHA1(encodedInfo);
+    const infoHash = calculateSHA1IntoHex(encodedInfo);
     console.log(`Info Hash: ${infoHash}`);
     console.log(`Piece Length: ${decoded.info["piece length"]}`);
 
@@ -274,19 +310,76 @@ if (args[2] === "info") {
 
     console.log("Piece Hashes");
 
-    for (let i = 0; i < pieces.length; i += pieceLength) {
-      const pieceHash = pieces.substring(i, i + pieceLength);
-
-      const hexHash = Array.from<string>(pieceHash)
-        .map((char) => char.charCodeAt(0).toString(16).padStart(2, "0"))
-        .join("");
-
-      console.log(hexHash);
+    for (const hex of extractPieceHashesInHex(pieces, pieceLength)) {
+      console.log(hex);
     }
-
   } catch (error: any) {
     console.error(error.message);
   }
 }
 
+function percentEncodeBuffer(buf: Buffer): string {
+  return Array.from(buf)
+    .map((b) => `%${b.toString(16).padStart(2, "0")}`)
+    .join("");
+}
 
+if (args[2] === "peers") {
+  try {
+    const torrentData = fs.readFileSync(args[3]);
+    const torrentString = torrentData.toString("binary");
+    const decoded: any = decodeBencode(torrentString);
+    const encodedInfo = bencodeDictonary(decoded.info);
+
+    let totalFileSize = 0;
+
+    if (decoded.info.files) {
+      // Multi-file torrent
+      for (const file of decoded.info.files) {
+        totalFileSize += file.length;
+      }
+    }
+    // Single file torrent
+    else totalFileSize = decoded.info.length;
+
+    const infoHash = crypto
+      .createHash("sha1")
+      .update(encodedInfo, "binary")
+      .digest();
+    const peerId = generateId(20);
+
+    const infoHashEscaped = percentEncodeBuffer(infoHash);
+    const peerIdEscaped = percentEncodeBuffer(peerId);
+
+    const params = {
+      port: `${6881}`,
+      uploaded: `${0}`,
+      downloaded: `${0}`,
+      left: `${totalFileSize}`,
+      compact: `${1}`,
+    };
+
+    const paramString = new URLSearchParams(params).toString();
+    const url = `${decoded.announce}?info_hash=${infoHashEscaped}&peer_id=${peerIdEscaped}&${paramString}`;
+    console.log(url);
+
+    fetch(url, { method: "GET" })
+      .then((res) => {
+        return res.arrayBuffer();
+      })
+      .then((arrayBuffer) => {
+        const responseString = String.fromCharCode(
+          ...new Uint8Array(arrayBuffer)
+        );
+        const trackerResponse: any = decodeBencode(responseString);
+        const peersField = trackerResponse.peers;
+        const peersBuf = Buffer.from(peersField);
+        const peersIp = decodePeersIp(peersBuf);
+        for (const item of peersIp) {
+          console.log(`${item[0].join(".")}:${item[1]}`);
+        }
+      });
+  } catch (error: any) {
+    console.error(error.message);
+  }
+}
