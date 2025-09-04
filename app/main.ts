@@ -169,8 +169,7 @@ if (args[2] === "handshake") {
     const torrentData = fs.readFileSync(torrentFileLocation);
     const torrentString = torrentData.toString("binary");
     if (args[4] === undefined) {
-      throw new Error(`Please specify peer ip and peer port in ip:port format to handshake
-eg: bittorrent handshake sample.torrent 192.168.1.1:53439`);
+      throw new Error(`Please specify peer ip and peer port in ip:port (eg: bittorrent handshake sample.torrent 192.168.1.1:53439)`);
     }
     const hostAndPort = args[4].split(":");
     (async function () {
@@ -191,31 +190,72 @@ eg: bittorrent handshake sample.torrent 192.168.1.1:53439`);
       const client = net.createConnection(
         { host: hostAndPort[0], port: parseInt(hostAndPort[1]) },
         () => {
-          console.log("Connected to server, sending handshake...");
+          const protocalName = Buffer.from("BitTorrent protocol");
+
+          const lengthPrefix = Buffer.from([protocalName.length]);
+
+          const reservedBytes = Buffer.alloc(8, 0);
+
+          const decoded: any = decodeBencode(torrentString);
+
+          const encodedInfo = bencodeDictonary(decoded.info);
+
+          const infoHash = crypto
+            .createHash("sha1")
+            .update(encodedInfo, "binary")
+            .digest();
+
+          const peerId = generateId(20);
+
+          const handshake = Buffer.concat([
+            lengthPrefix,
+            protocalName,
+            Buffer.alloc(8, 0),
+            infoHash,
+            peerId,
+          ]);
+          console.log(`Sending handshake of ${handshake.length} bytes...`);
+
+          client.write(handshake);
         }
       );
+
       client.on("connect", () => {
         console.log("TCP connection established");
       });
+
       client.on("error", (err: any) => {
         console.error(`Connection error ${err.message}`);
         console.error(`Server may be down or not accepting connection`);
       });
-      client.setTimeout(10000);
-      client.on("timeout", () => {
-        client.end();
-        throw new Error(`Connection timed out`);
+
+      client.on("data", (chunk: Buffer) => {
+        let readBytes = 0;
+        const lengthPrefix: number = chunk[readBytes];
+        readBytes = readBytes + 1;
+        const protocalName: string = chunk
+          .subarray(readBytes, lengthPrefix + readBytes)
+          .toString();
+
+        readBytes += lengthPrefix
+
+        // Ignore reserved bytes
+        readBytes += 8;
+
+        const infoHash = chunk.subarray(readBytes, readBytes + 20).toString("hex");
+        readBytes += 20;
+
+        const peerId = chunk.subarray(readBytes, readBytes + 20).toString("hex");
+        readBytes += 20;
+        console.log(`Peer ID: ${peerId}`)
+        
       });
-      client.on("data", (data: any) => {
-        console.log(`Handshake response from server: `);
-        console.log(data);
-      });
+
       client.on("close", () => {
         console.log("Connection closed");
       });
     })();
 
-    const decoded = decodeBencode(torrentString);
   } catch (error: any) {
     console.error(error.message);
   }
