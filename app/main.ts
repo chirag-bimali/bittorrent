@@ -41,59 +41,12 @@ function generateId(length: number = 20): Buffer<ArrayBuffer> {
   return crypto.randomBytes(length); // secure random numbers
 }
 
-function decodePeersIp(buf: Buffer): [Array<number>, number][] {
-  const peersIp: [number[], number][] = [];
-  const splitSequence = 6;
-  for (let i = 0; i < buf.length; i += splitSequence) {
-    const ip: Array<number> = [buf[i], buf[i + 1], buf[i + 2], buf[i + 3]];
-    const port = (buf[i + 4] << 8) | buf[i + 5];
-
-    peersIp.push([ip, port]);
-  }
-  return peersIp;
-}
-
 function percentEncodeBuffer(buf: Buffer): string {
   return Array.from(buf)
     .map((b) => `%${b.toString(16).padStart(2, "0")}`)
     .join("");
 }
 
-async function discoverPeers(
-  announce: string,
-  peerId: Buffer<ArrayBuffer>,
-  infoHash: Buffer<ArrayBuffer>,
-  port: number = 6881,
-  uploaded: number = 0,
-  downloaded: number = 0,
-  left: number = 0
-): Promise<[Array<number>, number][]> {
-  const infoHashEncoded = percentEncodeBuffer(infoHash);
-  const peerIdEncoded = percentEncodeBuffer(peerId);
-
-  const params = {
-    port: `${port}`,
-    uploaded: `${uploaded}`,
-    downloaded: `${downloaded}`,
-    left: `${left}`,
-    compact: `${1}`,
-  };
-
-  const paramEncoded = new URLSearchParams(params).toString();
-  const url = `${announce}?info_hash=${infoHashEncoded}&peer_id=${peerIdEncoded}&${paramEncoded}`;
-
-  const response = await fetch(url, { method: "GET" });
-  const arrayBuf = await response.arrayBuffer();
-  const responseString = String.fromCharCode(...new Uint8Array(arrayBuf));
-  const trackerResponse: Dictionary = decodeBencode(
-    responseString
-  ) as Dictionary;
-  const peersField = trackerResponse.peers;
-  const peersBuf = Buffer.from(peersField, "binary");
-  const peersIp = decodePeersIp(peersBuf);
-
-  return peersIp;
-}
 
 const args = process.argv;
 
@@ -189,6 +142,7 @@ class PeerConnection {
   public port: number = 6881;
   public readonly left = 0;
   public client: Socket | null = null;
+  public peersIp: [Array<number>, number][] | null = null;
 
   constructor(torrentString: string) {
     this.decoded = decodeBencode(torrentString) as Dictionary;
@@ -228,7 +182,21 @@ class PeerConnection {
     ) as Dictionary;
     const peersField = trackerResponse.peers;
     const peersBuf = Buffer.from(peersField, "binary");
-    const peersIp = decodePeersIp(peersBuf);
+
+    const peersIp: [number[], number][] = [];
+    // Decode peers buffer
+    const splitSequence = 6;
+    for (let i = 0; i < peersBuf.length; i += splitSequence) {
+      const ip: Array<number> = [
+        peersBuf[i],
+        peersBuf[i + 1],
+        peersBuf[i + 2],
+        peersBuf[i + 3],
+      ];
+      const port = (peersBuf[i + 4] << 8) | peersBuf[i + 5];
+
+      peersIp.push([ip, port]);
+    }
 
     return peersIp;
   }
