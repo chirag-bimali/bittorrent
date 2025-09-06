@@ -47,91 +47,6 @@ function percentEncodeBuffer(buf: Buffer): string {
     .join("");
 }
 
-
-const args = process.argv;
-
-if (args[2] === "decode") {
-  const bencodedValue = args[3];
-  console.error("Logs from your program will appear here!");
-  try {
-    const decoded = decodeBencode(bencodedValue);
-    console.log(decoded);
-  } catch (error: any) {
-    console.error(error.message);
-  }
-}
-
-if (args[2] === "info") {
-  try {
-    const torrentData = fs.readFileSync(args[3]);
-    const torrentString = torrentData.toString("binary");
-    const decoded: any = decodeBencode(torrentString);
-    console.log(`Tracker URL: ${decoded.announce}`);
-    console.log(`Length: ${decoded.info.length}`);
-    const encodedInfo = bencodeDictonary(decoded.info);
-    const infoHash = calculateSHA1IntoHex(encodedInfo);
-    console.log(`Info Hash: ${infoHash}`);
-    console.log(`Piece Length: ${decoded.info["piece length"]}`);
-
-    const pieces = decoded.info.pieces;
-
-    const pieceLength = 20;
-
-    console.log("Piece Hashes");
-
-    for (const hex of extractPieceHashesInHex(pieces, pieceLength)) {
-      console.log(hex);
-    }
-  } catch (error: any) {
-    console.error(error.message);
-  }
-}
-
-if (args[2] === "peers") {
-  try {
-    (async function () {
-      const torrentData = fs.readFileSync(args[3]);
-      const torrentString = torrentData.toString("binary");
-
-      const decoded: Dictionary = decodeBencode(torrentString) as Dictionary;
-
-      // const peers = await discoverPeers(torrentString);
-      const peerId = generateId(20);
-      const infoBencode = bencodeDictonary(decoded.info);
-      const infoHash = crypto
-        .createHash("sha1")
-        .update(infoBencode, "binary")
-        .digest();
-
-      let left = 0;
-      if (decoded.info.files) {
-        for (const file in decoded.info.file) {
-          left += file.length;
-        }
-      } else left = decoded.info.length;
-
-      const peers = await discoverPeers(
-        decoded.announce,
-        peerId,
-        infoHash,
-        6881,
-        0,
-        0,
-        left
-      );
-
-      console.log(`List of available peers:\n`);
-      let i = 1;
-      for (const peer of peers) {
-        console.log(`\t${i}. ${peer[0].join(".")}:${peer[1]}`);
-        i++;
-      }
-    })();
-  } catch (error: any) {
-    console.error(error.message);
-  }
-}
-
 class PeerConnection {
   /**
    *
@@ -287,10 +202,71 @@ class PeerConnection {
   }
 }
 
+const args = process.argv;
+
+if (args[2] === "decode") {
+  const bencodedValue = args[3];
+  console.error("Logs from your program will appear here!");
+  try {
+    const decoded = decodeBencode(bencodedValue);
+    console.log(decoded);
+  } catch (error: any) {
+    console.error(error.message);
+  }
+}
+
+if (args[2] === "info") {
+  try {
+    const torrentData = fs.readFileSync(args[3]);
+    const torrentString = torrentData.toString("binary");
+    const decoded: any = decodeBencode(torrentString);
+    console.log(`Tracker URL: ${decoded.announce}`);
+    console.log(`Length: ${decoded.info.length}`);
+    const encodedInfo = bencodeDictonary(decoded.info);
+    const infoHash = calculateSHA1IntoHex(encodedInfo);
+    console.log(`Info Hash: ${infoHash}`);
+    console.log(`Piece Length: ${decoded.info["piece length"]}`);
+
+    const pieces = decoded.info.pieces;
+
+    const pieceLength = 20;
+
+    console.log("Piece Hashes");
+
+    for (const hex of extractPieceHashesInHex(pieces, pieceLength)) {
+      console.log(hex);
+    }
+  } catch (error: any) {
+    console.error(error.message);
+  }
+}
+
+if (args[2] === "peers") {
+  try {
+    (async function () {
+      const torrentData = fs.readFileSync(args[3]);
+      const torrentString = torrentData.toString("binary");
+
+      const peerConnection: PeerConnection = new PeerConnection(torrentString);
+      const peers = await peerConnection.discoverPeers();
+
+      console.log(`List of available peers:\n`);
+      let i = 1;
+      for (const peer of peers) {
+        console.log(`\t${i}. ${peer[0].join(".")}:${peer[1]}`);
+        i++;
+      }
+    })();
+  } catch (error: any) {
+    console.error(error.message);
+  }
+}
+
 async function handshakeOption() {
   try {
     const torrentFileLocation = args[3];
-    const torrentString = fs.readFileSync(torrentFileLocation);
+    const torrentData = fs.readFileSync(torrentFileLocation);
+    const torrentString = torrentData.toString("binary");
 
     const peerConnection: PeerConnection = new PeerConnection(torrentString);
 
@@ -320,7 +296,8 @@ async function downloadPiece() {
     const output = args[4];
     const torrentFileLocation = args[5];
     const pieceIndex = args[6];
-    const torrentString = fs.readFileSync(torrentFileLocation);
+    const torrentData = fs.readFileSync(torrentFileLocation);
+    const torrentString = torrentData.toString("binary");
 
     const peerConnection: PeerConnection = new PeerConnection(torrentString);
   } catch (error: any) {
