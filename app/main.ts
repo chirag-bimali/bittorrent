@@ -4,6 +4,7 @@ const net = require("net");
 import type { Socket } from "net";
 
 import type { BencodeDecoder, BencodeEncoder, Dictionary } from "./types";
+import { buffer } from "stream/consumers";
 // const {   } = require("./bencodeDecoder");
 const {
   decodeBencodeString,
@@ -41,13 +42,7 @@ function generateId(length: number = 20): Buffer<ArrayBuffer> {
   return crypto.randomBytes(length); // secure random numbers
 }
 
-function percentEncodeBuffer(buf: Buffer): string {
-  return Array.from(buf)
-    .map((b) => `%${b.toString(16).padStart(2, "0")}`)
-    .join("");
-}
-
-class PeerConnection {
+class Torrent {
   /**
    *
    */
@@ -74,53 +69,65 @@ class PeerConnection {
     } else this.left += this.decoded.info.length;
   }
 
-  async discoverPeers(): Promise<[Array<number>, number][]> {
-    const infoHashEncoded = percentEncodeBuffer(this.infoHash);
-    const peerIdEncoded = percentEncodeBuffer(this.peerId);
-
-    const params = {
-      port: `${this.port}`,
-      uploaded: `${0}`,
-      downloaded: `${0}`,
-      left: `${this.left}`,
-      compact: `${1}`,
-    };
-
-    const paramEncoded = new URLSearchParams(params).toString();
-    const url = `${this.decoded.announce}?info_hash=${infoHashEncoded}&peer_id=${peerIdEncoded}&${paramEncoded}`;
-
-    const response = await fetch(url, { method: "GET" });
-    const arrayBuf = await response.arrayBuffer();
-    const responseString = String.fromCharCode(...new Uint8Array(arrayBuf));
-    const trackerResponse: Dictionary = decodeBencode(
-      responseString
-    ) as Dictionary;
-    const peersField = trackerResponse.peers;
-    const peersBuf = Buffer.from(peersField, "binary");
-
-    const peersIp: [number[], number][] = [];
-    // Decode peers buffer
-    const splitSequence = 6;
-    for (let i = 0; i < peersBuf.length; i += splitSequence) {
-      const ip: Array<number> = [
-        peersBuf[i],
-        peersBuf[i + 1],
-        peersBuf[i + 2],
-        peersBuf[i + 3],
-      ];
-      const port = (peersBuf[i + 4] << 8) | peersBuf[i + 5];
-
-      peersIp.push([ip, port]);
-    }
-
-    return peersIp;
+  percentEncodeBuffer(buf: Buffer): string {
+    return Array.from(buf)
+      .map((b) => `%${b.toString(16).padStart(2, "0")}`)
+      .join("");
   }
 
-  async connect(host: string, port: number): Promise<void> {
-    const peersIp = await this.discoverPeers();
+  async fetchPeers(): Promise<[Array<number>, number][]> {
+    try {
+      const infoHashEncoded = this.percentEncodeBuffer(this.infoHash);
+      const peerIdEncoded = this.percentEncodeBuffer(this.peerId);
+
+      const params = {
+        port: `${this.port}`,
+        uploaded: `${0}`,
+        downloaded: `${0}`,
+        left: `${this.left}`,
+        compact: `${1}`,
+      };
+
+      const paramEncoded = new URLSearchParams(params).toString();
+      const url = `${this.decoded.announce}?info_hash=${infoHashEncoded}&peer_id=${peerIdEncoded}&${paramEncoded}`;
+
+      const response = await fetch(url, { method: "GET" });
+      const arrayBuf = await response.arrayBuffer();
+      const responseString = String.fromCharCode(...new Uint8Array(arrayBuf));
+      const trackerResponse: Dictionary = decodeBencode(
+        responseString
+      ) as Dictionary;
+      const peersField = trackerResponse.peers;
+      const peersBuf = Buffer.from(peersField, "binary");
+
+      const peersIp: [number[], number][] = [];
+      // Decode peers buffer
+      const splitSequence = 6;
+      for (let i = 0; i < peersBuf.length; i += splitSequence) {
+        const ip: Array<number> = [
+          peersBuf[i],
+          peersBuf[i + 1],
+          peersBuf[i + 2],
+          peersBuf[i + 3],
+        ];
+        const port = (peersBuf[i + 4] << 8) | peersBuf[i + 5];
+
+        peersIp.push([ip, port]);
+      }
+
+      this.peersIp = peersIp;
+
+      return this.peersIp;
+    } catch (error: any) {
+      throw new Error(error.message ?? error);
+    }
+  }
+
+  connect(host: string, port: number): Promise<void> {
+    if (this.peersIp === null) throw new Error("No peers found to connect.");
 
     let found = false;
-    for (const item of peersIp) {
+    for (const item of this.peersIp) {
       if (host === item[0].join(".") && port === item[1]) {
         found = true;
         break;
@@ -136,32 +143,107 @@ class PeerConnection {
         });
 
         this.client?.on("connect", () => {
-          this.handshake();
+          if (this.client === null)
+            throw new Error(`Please establish a connection to handshake.`);
+
+          // Send Handshake message
+          const protocalName = Buffer.from("BitTorrent protocol");
+
+          const lengthPrefix = Buffer.from([protocalName.length]);
+
+          const reservedBytes = Buffer.alloc(8, 0);
+
+          const handshake = Buffer.concat([
+            lengthPrefix,
+            protocalName,
+            reservedBytes,
+            this.infoHash,
+            this.peerId,
+          ]);
+          console.log(`Sending handshake of ${handshake.length} bytes...`);
+
+          this.client.write(handshake);
         });
 
         this.client?.on("data", (chunk: Buffer) => {
-          let readBytes = 0;
-          const lengthPrefix: number = chunk[readBytes];
-          readBytes = readBytes + 1;
-          const protocalName: string = chunk
-            .subarray(readBytes, lengthPrefix + readBytes)
-            .toString();
+          // if (chunk.length >= 68) {
+          //   let readBytes = 0;
+          //   const lengthPrefix: number = chunk[readBytes];
+          //   readBytes = readBytes + 1;
+          //   const protocalName: string = chunk
+          //     .subarray(readBytes, lengthPrefix + readBytes)
+          //     .toString();
+          //   readBytes += lengthPrefix;
+          //   // Ignore reserved bytes
+          //   readBytes += 8;
+          //   const infoHash = chunk
+          //     .subarray(readBytes, readBytes + 20)
+          //     .toString("hex");
+          //   readBytes += 20;
+          //   const peerId = chunk
+          //     .subarray(readBytes, readBytes + 20)
+          //     .toString("hex");
+          //   readBytes += 20;
+          //   console.log(`Peer ID: ${peerId}`);
+          //   const interestedMessageLength = Buffer.alloc(4);
+          //   interestedMessageLength.writeUint32BE(1, 0);
+          //   const interestedMessage = Buffer.concat([
+          //     interestedMessageLength,
+          //     Buffer.from([2]),
+          //   ]);
+          //   console.log(interestedMessage);
+          //   this.client?.write(interestedMessage);
+          // } else if (this.messageType(chunk) === "keep-alive") {
+          //   this.client?.write(Buffer.from([0, 0, 0, 0]));
+          //   console.log(`Keeping-alive...`);
+          // } else {
+          //   console.log("hello?");
+          //   console.log(chunk);
+          // }
 
-          readBytes += lengthPrefix;
+          if (this.messageType(chunk) === "handshake-response") {
+            let readBytes = 0;
+            const lengthPrefix: number = chunk[readBytes];
+            readBytes = readBytes + 1;
+            const protocalName: string = chunk
+              .subarray(readBytes, lengthPrefix + readBytes)
+              .toString();
+            readBytes += lengthPrefix;
+            // Ignore reserved bytes
+            readBytes += 8;
+            const infoHash = chunk.subarray(readBytes, readBytes + 20);
 
-          // Ignore reserved bytes
-          readBytes += 8;
+            readBytes += 20;
+            const peerId = chunk.subarray(readBytes, readBytes + 20);
+            readBytes += 20;
+            console.log(`Peer ID: ${peerId}`);
 
-          const infoHash = chunk
-            .subarray(readBytes, readBytes + 20)
-            .toString("hex");
-          readBytes += 20;
+            if (this.peerId.toString("hex") !== peerId.toString("hex")) {
+              console.log(`Peer id not matched`);
+              console.log(`Connection dropped`);
+              this.client?.destroy();
+            }
 
-          const peerId = chunk
-            .subarray(readBytes, readBytes + 20)
-            .toString("hex");
-          readBytes += 20;
-          console.log(`Peer ID: ${peerId}`);
+            if (this.infoHash.toString("hex") !== infoHash.toString("hex")) {
+              console.log(`Info hash not matched`);
+              console.log(`Connection dropped`);
+              this.client?.destroy();
+            }
+
+            // // Sending interested messages
+            // const interestedMessageLength = Buffer.alloc(4);
+            // interestedMessageLength.writeUint32BE(1, 0);
+            // const interestedMessage = Buffer.concat([
+            //   interestedMessageLength,
+            //   Buffer.from([2]),
+            // ]);
+            // console.log(interestedMessage);
+            // this.client?.write(interestedMessage);
+          }
+          if (this.messageType(chunk) === "keep-alive") {
+            console.log(`Keep alive`);
+            this.client?.write(Buffer.alloc(4, 0));
+          }
         });
 
         this.client?.on("error", (err: any) => {
@@ -178,27 +260,24 @@ class PeerConnection {
       }
     });
   }
-  async handshake() {
-    if (this.client === null)
-      throw new Error(`Please establish a connection to handshake.`);
 
-    const protocalName = Buffer.from("BitTorrent protocol");
+  private messageType(buffer: Buffer<ArrayBufferLike>) {
+    if (buffer.every((byte) => byte === 0)) return "keep-alive";
+    if (buffer[3] === 1 && buffer[4] === 1) return "unchoke";
+    if (buffer.length === 4 && buffer[3] === 1 && buffer[4] === 3)
+      return "choke";
+    if (buffer[3] === 5) return "bitfield";
+    if (buffer[3] === 7) return "piece";
 
-    const lengthPrefix = Buffer.from([protocalName.length]);
+    let readBytes = 0;
+    const lengthPrefix: number = buffer[readBytes];
+    readBytes = readBytes + 1;
+    const protocalName: string = buffer
+      .subarray(readBytes, lengthPrefix + readBytes)
+      .toString();
 
-    const reservedBytes = Buffer.alloc(8, 0);
-
-    const handshake = Buffer.concat([
-      lengthPrefix,
-      protocalName,
-      reservedBytes,
-      this.infoHash,
-      this.peerId,
-    ]);
-    console.log(`Sending handshake of ${handshake.length} bytes...`);
-
-    this.client.write(handshake);
-    console.log("TCP connection established");
+    if (lengthPrefix == 19 && protocalName === "BitTorrent protocol")
+      return "handshake-response";
   }
 }
 
@@ -247,8 +326,8 @@ if (args[2] === "peers") {
       const torrentData = fs.readFileSync(args[3]);
       const torrentString = torrentData.toString("binary");
 
-      const peerConnection: PeerConnection = new PeerConnection(torrentString);
-      const peers = await peerConnection.discoverPeers();
+      const torrent: Torrent = new Torrent(torrentString);
+      const peers = await torrent.fetchPeers();
 
       console.log(`List of available peers:\n`);
       let i = 1;
@@ -268,7 +347,8 @@ async function handshakeOption() {
     const torrentData = fs.readFileSync(torrentFileLocation);
     const torrentString = torrentData.toString("binary");
 
-    const peerConnection: PeerConnection = new PeerConnection(torrentString);
+    const torrent: Torrent = new Torrent(torrentString);
+    await torrent.fetchPeers();
 
     if (args[4] === undefined) throw new Error(`Specify peer host:port`);
     const hostAndPort = args[4].split(":");
@@ -278,7 +358,7 @@ async function handshakeOption() {
         `Invalid host:port [${hostAndPort[0]}:${hostAndPort[1]}]`
       );
 
-    await peerConnection.connect(hostAndPort[0], parseInt(hostAndPort[1]));
+    await torrent.connect(hostAndPort[0], parseInt(hostAndPort[1]));
   } catch (error: any) {
     console.error(error.message);
   }
@@ -299,7 +379,7 @@ async function downloadPiece() {
     const torrentData = fs.readFileSync(torrentFileLocation);
     const torrentString = torrentData.toString("binary");
 
-    const peerConnection: PeerConnection = new PeerConnection(torrentString);
+    const torrent: Torrent = new Torrent(torrentString);
   } catch (error: any) {
     console.error(error.message);
   }
