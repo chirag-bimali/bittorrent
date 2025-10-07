@@ -1,6 +1,6 @@
 export type Dictionary = { [key: string]: any };
 
-export interface BencodeDecoder {
+export interface BencodeDecoderStatic {
   decodeBencodeString: (bencodedValue: string) => [string, number];
   decodeBencodeInteger: (bencodedValue: string) => [number, number];
   decodeBencodeList: (bencodedValue: string) => [Array<any>, number];
@@ -10,9 +10,9 @@ export interface BencodeDecoder {
   ) => string | number | Array<any> | Dictionary;
 }
 
-export interface BencodeEncoder {
-  bencodeInteger: (integer: number) => string;
-  bencodeString: (str: string) => string;
-  bencodeList: (array: Array<any>) => string;
-  bencodeDictonary: (obj: Dictionary) => string;
+export interface BencodeEncoderStatic {
+  bencodeInteger(integer: number): string;
+  bencodeString(str: string): string;
+  bencodeList(array: Array<any>): string;
+  bencodeDictonary(obj: Dictionary): string;
 }

@@ -1,0 +1,103 @@
+import type { Socket } from "net";
+import { buffer } from "stream/consumers";
+
+const net = require("net");
+
+export class TorrentMessage {
+  public rawBuffer: Buffer;
+  public messageType: string;
+  public payload: string | null;
+  constructor(rawBuffer: Buffer, messageType: string, payload: string | null) {
+    this.rawBuffer = rawBuffer;
+    this.messageType = messageType;
+    this.payload = payload;
+  }
+}
+
+export class PeerConnection {
+  public host: string;
+  public port: number;
+  public connection: Socket;
+  /**
+   *
+   */
+  constructor(host: string, port: number) {
+    this.host = host;
+    this.port = port;
+
+    this.connection = net.createConnection({ host: host, port: port }, () => {
+      console.log(`TCP connection established with ${host}:${port}`);
+    });
+  }
+
+  handshake(infoHash: Buffer<ArrayBuffer>, peerId: Buffer<ArrayBuffer>): void {
+    const protocalName = Buffer.from("BitTorrent protocol");
+    const lengthPrefix = Buffer.from([protocalName.length]);
+    const reservedBytes = Buffer.alloc(8, 0);
+    const handshake = Buffer.concat([
+      lengthPrefix,
+      protocalName,
+      reservedBytes,
+      infoHash,
+      peerId,
+    ]);
+    this.connection.write(handshake);
+  }
+  onConnected(connectionListener: (...args: any) => void): this {
+    if (!this.connection) throw new Error(`PeerConnection not initialized`);
+    this.connection.on("connect", connectionListener);
+    return this;
+  }
+  onRawData(callBack: (buffer: Buffer) => void) {
+    this.connection.on("data", (buffer: Buffer) => {
+      callBack(buffer);
+    });
+  }
+  onData(messageType: "keep-alive", callBack: () => boolean): this;
+  onData(messageType: "handshake-response", callBack: () => void): this;
+
+  onData(messageType: string, callBack: (value?: any) => void): this {
+    if (messageType === "keep-alive") {
+      this.connection.on("data", (buffer) => {
+        if (this.messageType(buffer) === "keep-alive") {
+          const result = (callBack as () => boolean)();
+          if (!result) {
+            this.connection.destroy();
+            return;
+          }
+          this.connection.write(Buffer.alloc(4, 0));
+        }
+      });
+      return this;
+    }
+    if (messageType === "handshake-response") {
+      this.connection.on("data", (buffer) => {
+        if (this.messageType(buffer) === "handshake-response") {
+          callBack();
+          return this;
+        }
+      });
+      return this;
+    }
+    return this;
+  }
+
+  messageType(buffer: Buffer<ArrayBufferLike>) {
+    if (buffer.every((byte) => byte === 0)) return "keep-alive";
+    if (buffer[3] === 1 && buffer[4] === 1) return "unchoke";
+    if (buffer.length === 4 && buffer[3] === 1 && buffer[4] === 3)
+      return "choke";
+    if (buffer[3] === 5) return "bitfield";
+    if (buffer[3] === 7) return "piece";
+
+    let readBytes = 0;
+    const lengthPrefix: number = buffer[readBytes];
+    readBytes = readBytes + 1;
+    const protocalName: string = buffer
+      .subarray(readBytes, lengthPrefix + readBytes)
+      .toString();
+
+    if (lengthPrefix == 19 && protocalName === "BitTorrent protocol")
+      return "handshake-response";
+  }
+}
