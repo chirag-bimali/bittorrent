@@ -18,7 +18,7 @@ export interface BencodeEncoderStatic {
 }
 
 export type Peer = {
-  id?: string;
+  id?: Buffer;
   host: string;
   port: number;
 };

@@ -147,7 +147,6 @@ async function downloadPiece() {
     const torrent: Torrent = new Torrent(torrentString);
 
     const availablePeers = await torrent.fetchPeers();
-    // console.log(availablePeers);
     const matched = availablePeers.find(({ host, port }) => {
       return host === peerIp && peerPort === port.toString();
     });
@@ -157,26 +156,14 @@ async function downloadPiece() {
     connection.onConnected(() => {
       console.log(`Connected to '${peerIp}:${peerPort}'`);
     });
-    connection.handshake(torrent.infoHash, torrent.peerId);
+    connection.handshake(torrent.infoHash, torrent.clientId);
     connection.onData("keep-alive", (): boolean => {
       console.log(`Keeping alive`);
       return true;
     });
-    // connection.onData("handshake", (): void => {
-    //   console.log("Shooked hand with the peer");
-    // });
-    connection.onData(
-      "handshake",
-      (lengthPrefix, protocalName, infoHash, peerId) => {
-        console.log(lengthPrefix);
-        console.log(protocalName);
-        console.log(infoHash.toString("hex"));
-        console.log(peerId.toString("hex"));
-      }
-    );
-    // connection.onData("handshake-response", () => {
-    //   console.log(`Handshake response arrived`);
-    // });
+    connection.onData("handshake", () => {
+      console.log(`Handshake successfull`);
+    });
   } catch (error: any) {
     console.error(error.message);
     console.error(`Exiting...`);

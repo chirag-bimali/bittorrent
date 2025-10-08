@@ -23,10 +23,9 @@ export default class Torrent {
    */
   public readonly decoded: Dictionary;
   public readonly infoHash: Buffer<ArrayBuffer>;
-  public readonly peerId: Buffer<ArrayBuffer>;
+  public readonly clientId: Buffer<ArrayBuffer>;
   public port: number = 6881;
   public readonly left = 0;
-  public client: Socket | null = null;
   public peers: Peer[] = [];
 
   constructor(torrentString: string) {
@@ -35,7 +34,7 @@ export default class Torrent {
       .createHash("sha1")
       .update(BencodeEncoder.bencodeDictonary(this.decoded.info), "binary")
       .digest();
-    this.peerId = crypto.randomBytes(20);
+    this.clientId = crypto.randomBytes(20);
 
     if (this.decoded.info.files) {
       for (const file in this.decoded.info.files) {
@@ -52,7 +51,7 @@ export default class Torrent {
 
   async fetchPeers(): Promise<Peer[]> {
     const infoHashEncoded = this.percentEncodeBuffer(this.infoHash);
-    const peerIdEncoded = this.percentEncodeBuffer(this.peerId);
+    const clientIdEncoded = this.percentEncodeBuffer(this.clientId);
     let compact = 0;
 
     const params = {
@@ -64,7 +63,7 @@ export default class Torrent {
     };
 
     const paramEncoded = new URLSearchParams(params).toString();
-    const url = `${this.decoded.announce}?info_hash=${infoHashEncoded}&peer_id=${peerIdEncoded}&${paramEncoded}`;
+    const url = `${this.decoded.announce}?info_hash=${infoHashEncoded}&peer_id=${clientIdEncoded}&${paramEncoded}`;
 
     const response = await fetch(url, { method: "GET" });
     const arrayBuf = await response.arrayBuffer();
@@ -87,7 +86,6 @@ export default class Torrent {
           peersBuf[i + 3],
         ];
         const port = (peersBuf[i + 4] << 8) | peersBuf[i + 5];
-        console.log(ip);
         this.peers.push({
           host: ip.join("."),
           port: port,
@@ -96,11 +94,10 @@ export default class Torrent {
     }
 
     return peersField.map((value: any): Peer => {
-      console.log(value)
       const peer: Peer = {
         host: value.ip,
         port: value.port,
-        id: value["peer id"],
+        id: Buffer.from(value["peer id"], "binary"),
       };
       return peer;
     });

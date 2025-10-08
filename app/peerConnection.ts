@@ -16,30 +16,29 @@ export class TorrentMessage {
 }
 
 export class PeerConnection {
-  public host: string;
-  public port: number;
+  public peer: Peer;
   public connection: Socket;
   public readonly PROTOCOL_NAME = "BitTorrent protocol";
-  public peerId?: Buffer;
   public infoHash?: Buffer;
 
   constructor(peer: Peer) {
-    this.host = peer.host;
-    this.port = peer.port;
+    this.peer = peer;
 
     this.connection = net.createConnection(
-      { host: this.host, port: this.port },
+      { host: peer.host, port: peer.port },
       () => {
         console.log(
-          `TCP connection established with ${this.host}:${this.port}`
+          `TCP connection established with ${peer.host}:${peer.port}`
         );
       }
     );
   }
 
-  handshake(infoHash: Buffer<ArrayBuffer>, peerId: Buffer<ArrayBuffer>): void {
+  handshake(
+    infoHash: Buffer<ArrayBuffer>,
+    clientId: Buffer<ArrayBuffer>
+  ): void {
     this.infoHash = infoHash;
-    this.peerId = peerId;
     const protocalName = Buffer.from("BitTorrent protocol");
     const lengthPrefix = Buffer.from([protocalName.length]);
     const reservedBytes = Buffer.alloc(8, 0);
@@ -48,7 +47,7 @@ export class PeerConnection {
       protocalName,
       reservedBytes,
       infoHash,
-      peerId,
+      clientId,
     ]);
     this.connection.write(handshake);
   }
@@ -102,8 +101,10 @@ export class PeerConnection {
         const protocalName = buffer
           .subarray(readBytes, readBytes + lengthPrefix)
           .toString();
-        if (protocalName !== this.PROTOCOL_NAME)
+        if (protocalName !== this.PROTOCOL_NAME) {
+          this.connection.destroy();
           throw new Error(`Invalid bittorent protocal handshake message`);
+        }
 
         readBytes += lengthPrefix;
 
@@ -113,26 +114,19 @@ export class PeerConnection {
         // 20 bytes info hash
         const infoHash = buffer.subarray(readBytes, readBytes + 20);
         readBytes += 20;
-        if (this.infoHash && !infoHash.equals(this.infoHash))
+        if (this.infoHash && !infoHash.equals(this.infoHash)) {
+          this.connection.destroy();
           throw new Error(`Info hash not matched`);
-        console.log(infoHash);
-        console.log(this.infoHash);
+        }
 
         // 20 bytes for peer_id
         const peerId = buffer.subarray(readBytes, readBytes + 20);
-        console.log(peerId);
-        console.log(this.peerId);
-        if (this.peerId && !peerId.equals(this.peerId))
+        if (this.peer.id && !peerId.equals(this.peer.id)) {
+          this.connection.destroy();
           throw new Error(`Peer id not matched`);
+        }
 
-        (
-          callBack as (
-            lengthPrefix: number,
-            protocalName: string,
-            infoHash: Buffer,
-            peerId: Buffer
-          ) => void
-        )(lengthPrefix, protocalName, infoHash, peerId);
+        callBack();
       });
       return this;
     }
