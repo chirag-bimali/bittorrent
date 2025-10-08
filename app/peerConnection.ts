@@ -54,7 +54,10 @@ export class PeerConnection {
     });
   }
   onData(messageType: "keep-alive", callBack: () => boolean): this;
-  onData(messageType: "handshake-response", callBack: () => void): this;
+  onData(messageType: "handshake", callBack: () => void): this;
+  onData(messageType: "unchoke", callBack: () => void): this;
+  onData(messageType: "piece", callBack: () => void): this;
+  onData(messageType: "bitfield", callBack: () => void): this;
 
   onData(messageType: string, callBack: (value?: any) => void): this {
     if (messageType === "keep-alive") {
@@ -70,16 +73,23 @@ export class PeerConnection {
       });
       return this;
     }
-    if (messageType === "handshake-response") {
+    if (messageType === "handshake") {
       this.connection.on("data", (buffer) => {
-        if (this.messageType(buffer) === "handshake-response") {
+        if (this.messageType(buffer) === "handshake") {
           callBack();
-          return this;
+          return;
         }
       });
       return this;
     }
-    return this;
+    if (messageType === "unchoke") {
+      this.connection.on("data", (buffer) => {
+        callBack();
+        return;
+      });
+    }
+
+    throw new Error(`Invalid message type '${messageType}'`);
   }
 
   messageType(buffer: Buffer<ArrayBufferLike>) {
@@ -98,6 +108,6 @@ export class PeerConnection {
       .toString();
 
     if (lengthPrefix == 19 && protocalName === "BitTorrent protocol")
-      return "handshake-response";
+      return "handshake";
   }
 }

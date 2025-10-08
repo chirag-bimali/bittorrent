@@ -161,7 +161,7 @@ async function downloadPiece() {
       console.log(`Keeping alive`);
       return true;
     });
-    connection.onData("handshake-response", (): void => {
+    connection.onData("handshake", (): void => {
       console.log("Shooked hand with the peer");
     });
     // connection.onData("handshake-response", () => {
