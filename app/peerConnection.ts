@@ -18,6 +18,7 @@ export class PeerConnection {
   public host: string;
   public port: number;
   public connection: Socket;
+  private readonly PROTOCAL_NAME = `BitTorrent protocol`;
   /**
    *
    */
@@ -75,10 +76,29 @@ export class PeerConnection {
     }
     if (messageType === "handshake") {
       this.connection.on("data", (buffer) => {
-        if (this.messageType(buffer) === "handshake") {
-          callBack();
-          return;
-        }
+        if (!(this.messageType(buffer) === "handshake")) return;
+        let readBytes = 0;
+        const lengthPrefix = buffer[readBytes];
+        readBytes++;
+        if (lengthPrefix !== this.PROTOCAL_NAME.length)
+          throw new Error(`Invalid handshake message arrived`);
+
+        const protocalName = buffer
+          .subarray(readBytes, readBytes + lengthPrefix)
+          .toString();
+        if (protocalName !== this.PROTOCAL_NAME)
+          throw new Error(`Invalid handshake message arrived`);
+        readBytes += lengthPrefix;
+
+        // 8 reserved bytes;
+        readBytes += 8;
+
+        // 20 bytes info hash
+        const info_hash = buffer
+          .subarray(readBytes, readBytes + 20)
+          .toString("hex");
+
+        callBack();
       });
       return this;
     }
