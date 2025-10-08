@@ -1,5 +1,6 @@
 import type { Socket } from "net";
 import { buffer } from "stream/consumers";
+import type { Peer } from "./types";
 
 const net = require("net");
 
@@ -18,20 +19,27 @@ export class PeerConnection {
   public host: string;
   public port: number;
   public connection: Socket;
-  private readonly PROTOCAL_NAME = `BitTorrent protocol`;
-  /**
-   *
-   */
-  constructor(host: string, port: number) {
-    this.host = host;
-    this.port = port;
+  public readonly PROTOCOL_NAME = "BitTorrent protocol";
+  public peerId?: Buffer;
+  public infoHash?: Buffer;
 
-    this.connection = net.createConnection({ host: host, port: port }, () => {
-      console.log(`TCP connection established with ${host}:${port}`);
-    });
+  constructor(peer: Peer) {
+    this.host = peer.host;
+    this.port = peer.port;
+
+    this.connection = net.createConnection(
+      { host: this.host, port: this.port },
+      () => {
+        console.log(
+          `TCP connection established with ${this.host}:${this.port}`
+        );
+      }
+    );
   }
 
   handshake(infoHash: Buffer<ArrayBuffer>, peerId: Buffer<ArrayBuffer>): void {
+    this.infoHash = infoHash;
+    this.peerId = peerId;
     const protocalName = Buffer.from("BitTorrent protocol");
     const lengthPrefix = Buffer.from([protocalName.length]);
     const reservedBytes = Buffer.alloc(8, 0);
@@ -55,12 +63,20 @@ export class PeerConnection {
     });
   }
   onData(messageType: "keep-alive", callBack: () => boolean): this;
-  onData(messageType: "handshake", callBack: () => void): this;
+  onData(
+    messageType: "handshake",
+    callBack: (
+      lengthPrefix: number,
+      protocalName: string,
+      infoHash: Buffer,
+      peerId: Buffer
+    ) => void
+  ): this;
   onData(messageType: "unchoke", callBack: () => void): this;
   onData(messageType: "piece", callBack: () => void): this;
   onData(messageType: "bitfield", callBack: () => void): this;
 
-  onData(messageType: string, callBack: (value?: any) => void): this {
+  onData(messageType: string, callBack: (...args: any[]) => void): this {
     if (messageType === "keep-alive") {
       this.connection.on("data", (buffer) => {
         if (this.messageType(buffer) === "keep-alive") {
@@ -80,31 +96,50 @@ export class PeerConnection {
         let readBytes = 0;
         const lengthPrefix = buffer[readBytes];
         readBytes++;
-        if (lengthPrefix !== this.PROTOCAL_NAME.length)
-          throw new Error(`Invalid handshake message arrived`);
+        if (lengthPrefix !== this.PROTOCOL_NAME.length)
+          throw new Error(`Invalid bittorent protocol handshake message`);
 
         const protocalName = buffer
           .subarray(readBytes, readBytes + lengthPrefix)
           .toString();
-        if (protocalName !== this.PROTOCAL_NAME)
-          throw new Error(`Invalid handshake message arrived`);
+        if (protocalName !== this.PROTOCOL_NAME)
+          throw new Error(`Invalid bittorent protocal handshake message`);
+
         readBytes += lengthPrefix;
 
         // 8 reserved bytes;
         readBytes += 8;
 
         // 20 bytes info hash
-        const info_hash = buffer
-          .subarray(readBytes, readBytes + 20)
-          .toString("hex");
+        const infoHash = buffer.subarray(readBytes, readBytes + 20);
+        readBytes += 20;
+        if (this.infoHash && !infoHash.equals(this.infoHash))
+          throw new Error(`Info hash not matched`);
+        console.log(infoHash);
+        console.log(this.infoHash);
 
-        callBack();
+        // 20 bytes for peer_id
+        const peerId = buffer.subarray(readBytes, readBytes + 20);
+        console.log(peerId);
+        console.log(this.peerId);
+        if (this.peerId && !peerId.equals(this.peerId))
+          throw new Error(`Peer id not matched`);
+
+        (
+          callBack as (
+            lengthPrefix: number,
+            protocalName: string,
+            infoHash: Buffer,
+            peerId: Buffer
+          ) => void
+        )(lengthPrefix, protocalName, infoHash, peerId);
       });
       return this;
     }
     if (messageType === "unchoke") {
       this.connection.on("data", (buffer) => {
         callBack();
+
         return;
       });
     }

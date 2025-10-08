@@ -7,6 +7,7 @@ import type {
   BencodeDecoderStatic,
   BencodeEncoderStatic,
   Dictionary,
+  Peer,
 } from "./types";
 
 import BencodeDecoderDefault from "./bencodeDecoder";
@@ -26,7 +27,7 @@ export default class Torrent {
   public port: number = 6881;
   public readonly left = 0;
   public client: Socket | null = null;
-  public peersIp: [Array<number>, number][] | null = null;
+  public peers: Peer[] = [];
 
   constructor(torrentString: string) {
     this.decoded = BencodeDecoder.decodeBencode(torrentString) as Dictionary;
@@ -49,16 +50,17 @@ export default class Torrent {
       .join("");
   }
 
-  async fetchPeers(): Promise<[Array<number>, number][]> {
+  async fetchPeers(): Promise<Peer[]> {
     const infoHashEncoded = this.percentEncodeBuffer(this.infoHash);
     const peerIdEncoded = this.percentEncodeBuffer(this.peerId);
+    let compact = 0;
 
     const params = {
       port: `${this.port}`,
       uploaded: `${0}`,
       downloaded: `${0}`,
       left: `${this.left}`,
-      compact: `${1}`,
+      compact: `${compact}`,
     };
 
     const paramEncoded = new URLSearchParams(params).toString();
@@ -71,25 +73,36 @@ export default class Torrent {
       responseString
     ) as Dictionary;
     const peersField = trackerResponse.peers;
-    const peersBuf = Buffer.from(peersField, "binary");
 
-    const peersIp: [number[], number][] = [];
-    // Decode peers buffer
-    const splitSequence = 6;
-    for (let i = 0; i < peersBuf.length; i += splitSequence) {
-      const ip: Array<number> = [
-        peersBuf[i],
-        peersBuf[i + 1],
-        peersBuf[i + 2],
-        peersBuf[i + 3],
-      ];
-      const port = (peersBuf[i + 4] << 8) | peersBuf[i + 5];
+    if (compact === 1) {
+      const peersBuf = Buffer.from(peersField, "binary");
+      // Decode peers buffer
+      const splitSequence = 6;
 
-      peersIp.push([ip, port]);
+      for (let i = 0; i < peersBuf.length; i += splitSequence) {
+        const ip: Array<number> = [
+          peersBuf[i],
+          peersBuf[i + 1],
+          peersBuf[i + 2],
+          peersBuf[i + 3],
+        ];
+        const port = (peersBuf[i + 4] << 8) | peersBuf[i + 5];
+        console.log(ip);
+        this.peers.push({
+          host: ip.join("."),
+          port: port,
+        });
+      }
     }
 
-    this.peersIp = peersIp;
-
-    return this.peersIp;
+    return peersField.map((value: any): Peer => {
+      console.log(value)
+      const peer: Peer = {
+        host: value.ip,
+        port: value.port,
+        id: value["peer id"],
+      };
+      return peer;
+    });
   }
 }

@@ -93,7 +93,7 @@ if (args[2] === "peers") {
       console.log(`List of available peers:\n`);
       let i = 1;
       for (const peer of peers) {
-        console.log(`\t${i}. ${peer[0].join(".")}:${peer[1]}`);
+        console.log(peer);
         i++;
       }
     })();
@@ -147,12 +147,13 @@ async function downloadPiece() {
     const torrent: Torrent = new Torrent(torrentString);
 
     const availablePeers = await torrent.fetchPeers();
-    const matched = availablePeers.find(([ip, port]) => {
-      return ip.join(".") === peerIp && peerPort === port.toString();
+    // console.log(availablePeers);
+    const matched = availablePeers.find(({ host, port }) => {
+      return host === peerIp && peerPort === port.toString();
     });
     if (!matched) throw new Error(`Peers '${peerIp}:${peerPort}' not found`);
 
-    const connection = new PeerConnection(peerIp, Number(peerPort));
+    const connection = new PeerConnection(matched);
     connection.onConnected(() => {
       console.log(`Connected to '${peerIp}:${peerPort}'`);
     });
@@ -161,9 +162,18 @@ async function downloadPiece() {
       console.log(`Keeping alive`);
       return true;
     });
-    connection.onData("handshake", (): void => {
-      console.log("Shooked hand with the peer");
-    });
+    // connection.onData("handshake", (): void => {
+    //   console.log("Shooked hand with the peer");
+    // });
+    connection.onData(
+      "handshake",
+      (lengthPrefix, protocalName, infoHash, peerId) => {
+        console.log(lengthPrefix);
+        console.log(protocalName);
+        console.log(infoHash.toString("hex"));
+        console.log(peerId.toString("hex"));
+      }
+    );
     // connection.onData("handshake-response", () => {
     //   console.log(`Handshake response arrived`);
     // });

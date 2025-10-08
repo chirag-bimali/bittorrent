@@ -16,3 +16,9 @@ export interface BencodeEncoderStatic {
   bencodeList(array: Array<any>): string;
   bencodeDictonary(obj: Dictionary): string;
 }
+
+export type Peer = {
+  id?: string;
+  host: string;
+  port: number;
+};
