@@ -1,6 +1,6 @@
 import type { Socket } from "net";
 import { buffer } from "stream/consumers";
-import { type MessageTypes, type Peer } from "./types";
+import { type MessageTypes, type Peer, type Piece } from "./types";
 
 const net = require("net");
 
@@ -52,7 +52,6 @@ export class PeerConnection {
     this.connection.write(handshake);
   }
   interested() {
-    console.log(Buffer.from([0, 0, 0, 1, 2]));
     this.connection.write(Buffer.from([0, 0, 0, 1, 2]));
   }
   onConnected(connectionListener: (...args: any) => void): this {
@@ -60,6 +59,7 @@ export class PeerConnection {
     this.connection.on("connect", connectionListener);
     return this;
   }
+  request(piece: Piece) {}
 
   onRawData(callBack: (buffer: Buffer) => void) {
     this.connection.on("data", (buffer: Buffer) => {
@@ -76,8 +76,10 @@ export class PeerConnection {
       peerId: Buffer
     ) => void
   ): this;
+
   onData(messageType: "unchoke", callBack: () => void): this;
   onData(messageType: "interested", callBack: () => void): this;
+  onData(messageType: "request", callBack: () => void): this;
   onData(messageType: "piece", callBack: () => void): this;
   onData(messageType: "bitfield", callBack: () => void): this;
 
@@ -140,23 +142,20 @@ export class PeerConnection {
     if (messageType === "unchoke") {
       this.connection.on("data", (buffer) => {
         callBack();
-
         return;
       });
       return this;
     }
     if (messageType === "bitfield") {
       this.connection.on("data", (buffer) => {
-        console.log(buffer[3]);
         if (this.messageType(buffer) !== "bitfield") return;
-        console.log(buffer);
+        callBack();
       });
       return this;
     }
     if (messageType === "interested") {
       this.connection.on("data", (buffer) => {
         if (this.messageType(buffer) !== "interested") return;
-        console.log(buffer);
         callBack();
       });
       return this;
@@ -164,8 +163,21 @@ export class PeerConnection {
 
     throw new Error(`Invalid message type '${messageType}'`);
   }
-  bitfield(args: any) {
-    console.log(args);
+  bitfield(pieces: Piece[]) {
+    const numbBytes = Math.ceil(pieces.length / 8);
+    const bitfield = Buffer.alloc(numbBytes, 0);
+
+    for (let i = 0; i < pieces.length; i++) {
+      if (pieces[i].have) {
+        const bitIndex = Math.floor(i % 8);
+        const bitOffset = 7 - (i % 8);
+        const mask = 1 << bitOffset;
+        bitfield[bitIndex] = bitfield[bitIndex] | mask;
+      }
+    }
+    this.connection.write(
+      Buffer.from([0, 0, 0, bitfield.length + 1, 5, ...bitfield])
+    );
   }
 
   messageType(buffer: Buffer<ArrayBufferLike>): MessageTypes {
@@ -186,7 +198,6 @@ export class PeerConnection {
     if (lengthPrefix == 19 && protocalName === "BitTorrent protocol")
       return "handshake";
 
-    console.log(buffer[3]);
     switch (buffer[3]) {
       case 0:
         return "choke";

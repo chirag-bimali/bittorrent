@@ -50,7 +50,6 @@ export default class Torrent {
         have: false,
       });
     }
-    console.log(this.pieces);
 
     if (this.decoded.info.files) {
       for (const file in this.decoded.info.files) {

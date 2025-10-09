@@ -168,9 +168,9 @@ async function downloadPiece() {
     connection.onData("unchoke", () => {
       connection.interested();
     });
-    connection.bitfield(torrent.decoded);
+    connection.bitfield(torrent.pieces);
     connection.onData("bitfield", () => {
-      console.log("hello");
+      console.log("bitfield message received");
     });
   } catch (error: any) {
     console.error(error.message);
