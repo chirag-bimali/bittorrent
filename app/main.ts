@@ -164,6 +164,14 @@ async function downloadPiece() {
     connection.onData("handshake", () => {
       console.log(`Handshake successfull`);
     });
+    connection.interested();
+    connection.onData("unchoke", () => {
+      connection.interested();
+    });
+    connection.bitfield(torrent.decoded);
+    connection.onData("bitfield", () => {
+      console.log("hello");
+    });
   } catch (error: any) {
     console.error(error.message);
     console.error(`Exiting...`);

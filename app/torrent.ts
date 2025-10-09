@@ -8,6 +8,7 @@ import type {
   BencodeEncoderStatic,
   Dictionary,
   Peer,
+  Piece,
 } from "./types";
 
 import BencodeDecoderDefault from "./bencodeDecoder";
@@ -21,6 +22,8 @@ export default class Torrent {
   public readonly decoded: Dictionary;
   public readonly infoHash: Buffer<ArrayBuffer>;
   public readonly clientId: Buffer<ArrayBuffer>;
+  public readonly PIECE_INDEX_LENGTH: number = 20;
+  public readonly pieces: Piece[] = [];
   public port: number = 6881;
   public readonly left = 0;
   public peers: Peer[] = [];
@@ -32,6 +35,22 @@ export default class Torrent {
       .update(BencodeEncoder.bencodeDictonary(this.decoded.info), "binary")
       .digest();
     this.clientId = crypto.randomBytes(20);
+
+    // Decode piece indexes
+    for (
+      let i = 0;
+      i < this.decoded.info.pieces.length;
+      i += this.PIECE_INDEX_LENGTH
+    ) {
+      this.pieces.push({
+        index: this.decoded.info.pieces.substring(
+          i,
+          i + this.PIECE_INDEX_LENGTH
+        ),
+        have: false,
+      });
+    }
+    console.log(this.pieces);
 
     if (this.decoded.info.files) {
       for (const file in this.decoded.info.files) {

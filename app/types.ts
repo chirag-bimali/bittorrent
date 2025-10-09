@@ -35,3 +35,8 @@ export type Peer = {
   host: string;
   port: number;
 };
+
+export type Piece = {
+  index: Buffer;
+  have: boolean;
+};

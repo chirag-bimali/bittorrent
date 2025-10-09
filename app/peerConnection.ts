@@ -51,11 +51,16 @@ export class PeerConnection {
     ]);
     this.connection.write(handshake);
   }
+  interested() {
+    console.log(Buffer.from([0, 0, 0, 1, 2]));
+    this.connection.write(Buffer.from([0, 0, 0, 1, 2]));
+  }
   onConnected(connectionListener: (...args: any) => void): this {
     if (!this.connection) throw new Error(`PeerConnection not initialized`);
     this.connection.on("connect", connectionListener);
     return this;
   }
+
   onRawData(callBack: (buffer: Buffer) => void) {
     this.connection.on("data", (buffer: Buffer) => {
       callBack(buffer);
@@ -72,6 +77,7 @@ export class PeerConnection {
     ) => void
   ): this;
   onData(messageType: "unchoke", callBack: () => void): this;
+  onData(messageType: "interested", callBack: () => void): this;
   onData(messageType: "piece", callBack: () => void): this;
   onData(messageType: "bitfield", callBack: () => void): this;
 
@@ -137,9 +143,29 @@ export class PeerConnection {
 
         return;
       });
+      return this;
+    }
+    if (messageType === "bitfield") {
+      this.connection.on("data", (buffer) => {
+        console.log(buffer[3]);
+        if (this.messageType(buffer) !== "bitfield") return;
+        console.log(buffer);
+      });
+      return this;
+    }
+    if (messageType === "interested") {
+      this.connection.on("data", (buffer) => {
+        if (this.messageType(buffer) !== "interested") return;
+        console.log(buffer);
+        callBack();
+      });
+      return this;
     }
 
     throw new Error(`Invalid message type '${messageType}'`);
+  }
+  bitfield(args: any) {
+    console.log(args);
   }
 
   messageType(buffer: Buffer<ArrayBufferLike>): MessageTypes {
@@ -160,6 +186,7 @@ export class PeerConnection {
     if (lengthPrefix == 19 && protocalName === "BitTorrent protocol")
       return "handshake";
 
+    console.log(buffer[3]);
     switch (buffer[3]) {
       case 0:
         return "choke";
