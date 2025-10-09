@@ -1,6 +1,6 @@
 import type { Socket } from "net";
 import { buffer } from "stream/consumers";
-import type { Peer } from "./types";
+import { type MessageTypes, type Peer } from "./types";
 
 const net = require("net");
 
@@ -75,7 +75,7 @@ export class PeerConnection {
   onData(messageType: "piece", callBack: () => void): this;
   onData(messageType: "bitfield", callBack: () => void): this;
 
-  onData(messageType: string, callBack: (...args: any[]) => void): this {
+  onData(messageType: MessageTypes, callBack: (...args: any[]) => void): this {
     if (messageType === "keep-alive") {
       this.connection.on("data", (buffer) => {
         if (this.messageType(buffer) === "keep-alive") {
@@ -142,13 +142,13 @@ export class PeerConnection {
     throw new Error(`Invalid message type '${messageType}'`);
   }
 
-  messageType(buffer: Buffer<ArrayBufferLike>) {
-    if (buffer.every((byte) => byte === 0)) return "keep-alive";
-    if (buffer[3] === 1 && buffer[4] === 1) return "unchoke";
-    if (buffer.length === 4 && buffer[3] === 1 && buffer[4] === 3)
-      return "choke";
-    if (buffer[3] === 5) return "bitfield";
-    if (buffer[3] === 7) return "piece";
+  messageType(buffer: Buffer<ArrayBufferLike>): MessageTypes {
+    if (
+      buffer.every((value) => {
+        return value == 0;
+      })
+    )
+      return "keep-alive";
 
     let readBytes = 0;
     const lengthPrefix: number = buffer[readBytes];
@@ -159,5 +159,38 @@ export class PeerConnection {
 
     if (lengthPrefix == 19 && protocalName === "BitTorrent protocol")
       return "handshake";
+
+    switch (buffer[3]) {
+      case 0:
+        return "choke";
+        break;
+      case 1:
+        return "unchoke";
+        break;
+      case 2:
+        return "interested";
+        break;
+      case 3:
+        return "not-interested";
+        break;
+      case 4:
+        return "have";
+        break;
+      case 5:
+        return "bitfield";
+        break;
+      case 6:
+        return "request";
+        break;
+      case 7:
+        return "piece";
+        break;
+      case 8:
+        return "cancel";
+        break;
+      default:
+        throw new Error(`Message type not implemented for ${buffer[3]}`);
+        break;
+    }
   }
 }

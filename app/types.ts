@@ -1,5 +1,18 @@
 export type Dictionary = { [key: string]: any };
 
+export type MessageTypes =
+  | "keep-alive"
+  | "handshake"
+  | "unchoke"
+  | "choke"
+  | "interested"
+  | "not-interested"
+  | "have"
+  | "bitfield"
+  | "request"
+  | "piece"
+  | "cancel";
+
 export interface BencodeDecoderStatic {
   decodeBencodeString: (bencodedValue: string) => [string, number];
   decodeBencodeInteger: (bencodedValue: string) => [number, number];
