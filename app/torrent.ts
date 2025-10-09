@@ -18,9 +18,6 @@ import { PeerConnection } from "./peerConnection";
 const BencodeEncoder = BencodeEncoderDefault as BencodeEncoderStatic;
 
 export default class Torrent {
-  /**
-   *
-   */
   public readonly decoded: Dictionary;
   public readonly infoHash: Buffer<ArrayBuffer>;
   public readonly clientId: Buffer<ArrayBuffer>;

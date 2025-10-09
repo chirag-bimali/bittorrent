@@ -114,6 +114,7 @@ export class PeerConnection {
         // 20 bytes info hash
         const infoHash = buffer.subarray(readBytes, readBytes + 20);
         readBytes += 20;
+        if (!this.infoHash) throw new Error(`Info hash not found`);
         if (this.infoHash && !infoHash.equals(this.infoHash)) {
           this.connection.destroy();
           throw new Error(`Info hash not matched`);
