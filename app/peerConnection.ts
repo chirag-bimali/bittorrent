@@ -1,5 +1,4 @@
 import type { Socket } from "net";
-import { buffer, buffer } from "stream/consumers";
 import { type MessageTypes, type Peer, type Piece } from "./types";
 
 const net = require("net");
@@ -22,6 +21,7 @@ export class PeerConnection {
   public infoHash?: Buffer;
   public choked: boolean = true;
   public buffer: Buffer = Buffer.alloc(0);
+  public pendingBuffer: Buffer[] = [];
 
   constructor(peer: Peer) {
     this.peer = peer;
@@ -80,10 +80,14 @@ export class PeerConnection {
   }
   request(piece: Piece) {}
 
+  private isReading: boolean = false;
   onRawData(callBack: (buffer: Buffer) => void) {
     this.connection.on("data", (buffer: Buffer) => {
-      this.buffer = Buffer.concat([this.buffer, buffer]);
-
+      if (this.isReading) {
+        this.pendingBuffer.push(buffer);
+        return;
+      }
+      this.isReading = true;
       while (this.buffer.length !== 0) {
         if (
           this.buffer[0] === 19 &&
@@ -139,9 +143,10 @@ export class PeerConnection {
           break;
         } else break;
       }
-      console.log(this.buffer)
+      console.log(this.buffer);
     });
   }
+
   onData(messageType: "keep-alive", callBack: () => boolean): this;
   onData(
     messageType: "handshake",
