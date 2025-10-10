@@ -21,7 +21,7 @@ export class PeerConnection {
   public infoHash?: Buffer;
   public choked: boolean = true;
   public buffer: Buffer = Buffer.alloc(0);
-  public pendingBuffer: Buffer[] = [];
+  public pendingBuffer: Buffer = Buffer.alloc(0);
 
   constructor(peer: Peer) {
     this.peer = peer;
@@ -83,10 +83,10 @@ export class PeerConnection {
   private isReading: boolean = false;
   onRawData(callBack: (buffer: Buffer) => void) {
     this.connection.on("data", (buffer: Buffer) => {
-      if (this.isReading) {
-        this.pendingBuffer.push(buffer);
-        return;
+      while (this.isReading) {
+        console.log(`dude`);
       }
+      this.buffer = buffer;
       this.isReading = true;
       while (this.buffer.length !== 0) {
         if (
@@ -109,7 +109,6 @@ export class PeerConnection {
             continue;
           }
           callBack(this.buffer);
-          break;
         } else if (
           this.buffer.length >= 4 &&
           this.buffer.readInt32BE(0) === 0
@@ -122,7 +121,6 @@ export class PeerConnection {
             continue;
           }
           callBack(this.buffer);
-          break;
         } else if (
           this.buffer.length >= 4 &&
           this.buffer.readInt32BE(0) !== 0 &&
@@ -130,9 +128,21 @@ export class PeerConnection {
         ) {
           // messages
           if (this.buffer.length > 4) {
-            const message = this.buffer.subarray(0, this.buffer.readInt32BE(0));
-            this.buffer = this.buffer.subarray(this.buffer.readInt32BE(0));
+            const messageLength = this.buffer.readUInt32BE(0);
+            // 4 byte for length prefix
+            const message = this.buffer.subarray(
+              0,
+              this.buffer.readInt32BE(0) + 4
+            );
+            if (this.buffer.length > message.length) {
+              this.buffer = this.buffer.subarray(
+                4 + this.buffer.readInt32BE(0)
+              );
+              callBack(message);
+              continue;
+            }
             callBack(message);
+            break;
           }
           callBack(this.buffer);
         } else if (
@@ -143,7 +153,7 @@ export class PeerConnection {
           break;
         } else break;
       }
-      console.log(this.buffer);
+      this.isReading = false;
     });
   }
 
@@ -265,7 +275,7 @@ export class PeerConnection {
     if (lengthPrefix == 19 && protocalName === "BitTorrent protocol")
       return "handshake";
 
-    switch (buffer[3]) {
+    switch (buffer[4]) {
       case 0:
         return "choke";
         break;

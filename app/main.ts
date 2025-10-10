@@ -157,7 +157,6 @@ async function downloadPiece() {
       console.log(`Connected to '${peerIp}:${peerPort}'`);
     });
     connection.handshake(torrent.infoHash, torrent.clientId);
-    connection.onRawData((buffer) => {});
     connection.onData("keep-alive", (): boolean => {
       console.log(`Keeping alive`);
       return true;
