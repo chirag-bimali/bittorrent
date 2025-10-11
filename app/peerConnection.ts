@@ -7,6 +7,7 @@ export class TorrentMessage {
   public rawBuffer: Buffer;
   public messageType: string;
   public payload: string | null;
+
   constructor(rawBuffer: Buffer, messageType: string, payload: string | null) {
     this.rawBuffer = rawBuffer;
     this.messageType = messageType;
@@ -20,8 +21,8 @@ export class PeerConnection {
   public readonly PROTOCOL_NAME = "BitTorrent protocol";
   public infoHash?: Buffer;
   public choked: boolean = true;
-  public buffer: Buffer = Buffer.alloc(0);
   public pendingBuffer: Buffer = Buffer.alloc(0);
+  private events: Record<string, (...args: any[]) => void> = {};
 
   constructor(peer: Peer) {
     this.peer = peer;
@@ -53,6 +54,63 @@ export class PeerConnection {
     ]);
     this.connection.write(handshake);
   }
+  listen() {
+    this.connection.on("data", (buffer: Buffer) => {
+      const buffers = this.onRawDataParser(buffer);
+      for (const buf of buffers) {
+        this.events[this.messageType(buf)]?.(buf);
+      }
+    });
+  }
+  private onRawDataParser(buf: Buffer): Buffer[] {
+    const buffers: Buffer[] = [];
+
+    let buffer = buf;
+    while (buffer.length !== 0) {
+      if (
+        buffer[0] === 19 &&
+        buffer.subarray(1, 20).toString("binary") === `BitTorrent protocol`
+      ) {
+        if (buffer.length > 68) {
+          const message = buffer.subarray(0, 68);
+          buffer = buffer.subarray(68);
+          buffers.push(message);
+          continue;
+        }
+        buffers.push(buffer);
+      } else if (buffer.length >= 4 && buffer.readInt32BE(0) === 0) {
+        // keep-alive message
+        const message = buffer.subarray(0, 3);
+        buffers.push(message);
+        if (buffer.length > 4) {
+          buffer = buffer.subarray(3);
+          continue;
+        }
+        break;
+      } else if (
+        buffer.length >= 4 &&
+        buffer.readInt32BE(0) !== 0 &&
+        buffer.length >= buffer.readInt32BE(0)
+      ) {
+        // messages
+        if (buffer.readInt32BE(0) < buffer.subarray(3).length) {
+          buffers.push(buffer);
+          break;
+        }
+
+        const message = buffer.subarray(0, buffer.readInt32BE(0) + 4);
+        buffers.push(message);
+
+        // 4 byte for length prefix
+        if (buffer.length > message.length) {
+          buffer = buffer.subarray(4 + buffer.readInt32BE(0));
+          continue;
+        }
+        break;
+      } else break;
+    }
+    return buffers;
+  }
   interested() {
     this.connection.write(Buffer.from([0, 0, 0, 1, 2]));
   }
@@ -80,82 +138,7 @@ export class PeerConnection {
   }
   request(piece: Piece) {}
 
-  private isReading: boolean = false;
-  onRawData(callBack: (buffer: Buffer) => void) {
-    this.connection.on("data", (buffer: Buffer) => {
-      while (this.isReading) {
-        console.log(`dude`);
-      }
-      this.buffer = buffer;
-      this.isReading = true;
-      while (this.buffer.length !== 0) {
-        if (
-          this.buffer[0] === 19 &&
-          this.buffer.subarray(1, 20).toString("binary") ===
-            `BitTorrent protocol`
-        ) {
-          let readBytes: number = 0;
-          readBytes = 0; // Length Prefix
-          readBytes++; //  Protocol name start
-          readBytes += 19; //  Length of `BitTorent protocol`
-          readBytes += 8; //  Reserved Bytes
-          readBytes += 20; //  Lenght of info hash
-          readBytes += 20; //  Length peer id
-
-          if (this.buffer.length > readBytes) {
-            const message = this.buffer.subarray(0, readBytes);
-            this.buffer = this.buffer.subarray(readBytes);
-            callBack(message);
-            continue;
-          }
-          callBack(this.buffer);
-        } else if (
-          this.buffer.length >= 4 &&
-          this.buffer.readInt32BE(0) === 0
-        ) {
-          // keep-alive message
-          if (this.buffer.length > 4) {
-            const message = this.buffer.subarray(0, 3);
-            this.buffer = this.buffer.subarray(3);
-            callBack(message);
-            continue;
-          }
-          callBack(this.buffer);
-        } else if (
-          this.buffer.length >= 4 &&
-          this.buffer.readInt32BE(0) !== 0 &&
-          this.buffer.length >= this.buffer.readInt32BE(0)
-        ) {
-          // messages
-          if (this.buffer.length > 4) {
-            const messageLength = this.buffer.readUInt32BE(0);
-            // 4 byte for length prefix
-            const message = this.buffer.subarray(
-              0,
-              this.buffer.readInt32BE(0) + 4
-            );
-            if (this.buffer.length > message.length) {
-              this.buffer = this.buffer.subarray(
-                4 + this.buffer.readInt32BE(0)
-              );
-              callBack(message);
-              continue;
-            }
-            callBack(message);
-            break;
-          }
-          callBack(this.buffer);
-        } else if (
-          this.buffer.length >= 4 &&
-          this.buffer.readInt32BE(0) !== 0 &&
-          this.buffer.length < this.buffer.readInt32BE(0)
-        ) {
-          break;
-        } else break;
-      }
-      this.isReading = false;
-    });
-  }
+  onRawData(callBack: (buffer: Buffer) => void) {}
 
   onData(messageType: "keep-alive", callBack: () => boolean): this;
   onData(
@@ -175,8 +158,9 @@ export class PeerConnection {
   onData(messageType: "bitfield", callBack: () => void): this;
 
   onData(messageType: MessageTypes, callBack: (...args: any[]) => void): this {
-    if (messageType === "keep-alive") {
-      this.connection.on("data", (buffer) => {
+    this.events[messageType] = callBack;
+    this.onRawData((buffer) => {
+      if (messageType === "keep-alive") {
         if (this.messageType(buffer) === "keep-alive") {
           const result = (callBack as () => boolean)();
           if (!result) {
@@ -185,11 +169,10 @@ export class PeerConnection {
           }
           this.connection.write(Buffer.alloc(4, 0));
         }
-      });
-      return this;
-    }
-    if (messageType === "handshake") {
-      this.onRawData((buffer) => {
+        return;
+      }
+
+      if (messageType === "handshake") {
         if (!(this.messageType(buffer) === "handshake")) return;
         let readBytes = 0;
         const lengthPrefix = buffer[readBytes];
@@ -225,36 +208,28 @@ export class PeerConnection {
           this.connection.destroy();
           throw new Error(`Peer id not matched`);
         }
-
         callBack();
-      });
-      return this;
-    }
-    if (messageType === "unchoke") {
-      this.onRawData((buffer) => {
+        return;
+      }
+      if (messageType === "unchoke") {
         if (this.messageType(buffer) !== "unchoke") return;
         this.choked = false;
         callBack();
         return;
-      });
-      return this;
-    }
-    if (messageType === "bitfield") {
-      this.onRawData((buffer) => {
+      }
+      if (messageType === "bitfield") {
         if (this.messageType(buffer) !== "bitfield") return;
         callBack();
-      });
-      return this;
-    }
-    if (messageType === "interested") {
-      this.onRawData((buffer) => {
+        return;
+      }
+      if (messageType === "interested") {
         if (this.messageType(buffer) !== "interested") return;
         callBack();
-      });
-      return this;
-    }
+        return;
+      }
+    });
 
-    throw new Error(`Invalid message type '${messageType}'`);
+    return this;
   }
 
   messageType(buffer: Buffer<ArrayBufferLike>): MessageTypes {

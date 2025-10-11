@@ -161,16 +161,17 @@ async function downloadPiece() {
       console.log(`Keeping alive`);
       return true;
     });
+    connection.listen()
     connection.onData("handshake", () => {
       console.log(`Handshake successfull`);
     });
     connection.interested();
     connection.bitfield(torrent.pieces);
+    connection.onData("bitfield", () => {
+      console.log("Bitfield");
+    });
     connection.onData("unchoke", () => {
       console.log(`Unchoked!`);
-    });
-    connection.onData("bitfield", () => {
-      console.log("bitfield message received");
     });
   } catch (error: any) {
     console.error(error.message);
