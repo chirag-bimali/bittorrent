@@ -142,8 +142,12 @@ export class PeerConnection {
     this.connection.on("data", (buffer: Buffer) => {
       let buffers: Buffer[];
       let leftover: Buffer | null = null;
+      let buf = buffer;
 
-      [buffers, leftover] = this.deserializeStream(buffer, leftover);
+      if (leftover !== null) {
+        buf = Buffer.concat([leftover, buffer]);
+      }
+      [buffers, leftover] = this.deserializeStream(buf);
       for (const buf of buffers) {
         const request = new Request(buf);
         this.events[request.messageType(buf)]?.(request, response);
@@ -151,16 +155,10 @@ export class PeerConnection {
     });
   }
 
-  public deserializeStream(
-    buf: Buffer,
-    leftover: Buffer | null
-  ): [Buffer[], Buffer | null] {
+  public deserializeStream(buf: Buffer): [Buffer[], Buffer | null] {
     const buffers: Buffer[] = [];
 
     let buffer = buf;
-    if (leftover !== null) {
-      buffer = Buffer.concat([leftover, buffer]);
-    }
     while (buffer.length !== 0) {
       if (
         buffer[0] === 19 &&
