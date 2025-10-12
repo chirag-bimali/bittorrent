@@ -140,7 +140,10 @@ export class PeerConnection {
     const response = new Response(this.connection);
 
     this.connection.on("data", (buffer: Buffer) => {
-      const buffers = this.dataSplitter(buffer);
+      let buffers: Buffer[];
+      let leftover: Buffer | null = null;
+
+      [buffers, leftover] = this.deserializeStream(buffer, leftover);
       for (const buf of buffers) {
         const request = new Request(buf);
         this.events[request.messageType(buf)]?.(request, response);
@@ -148,10 +151,16 @@ export class PeerConnection {
     });
   }
 
-  public dataSplitter(buf: Buffer): Buffer[] {
+  public deserializeStream(
+    buf: Buffer,
+    leftover: Buffer | null
+  ): [Buffer[], Buffer | null] {
     const buffers: Buffer[] = [];
 
     let buffer = buf;
+    if (leftover !== null) {
+      buffer = Buffer.concat([leftover, buffer]);
+    }
     while (buffer.length !== 0) {
       if (
         buffer[0] === 19 &&
@@ -176,26 +185,19 @@ export class PeerConnection {
       } else if (
         buffer.length >= 4 &&
         buffer.readInt32BE(0) !== 0 &&
-        buffer.length >= buffer.readInt32BE(0)
+        buffer.subarray(4).length >= buffer.readInt32BE(0)
       ) {
-        // messages
-        if (buffer.readInt32BE(0) < buffer.subarray(3).length) {
-          buffers.push(buffer);
-          break;
-        }
-
         const message = buffer.subarray(0, buffer.readInt32BE(0) + 4);
         buffers.push(message);
-
-        // 4 byte for length prefix
         if (buffer.length > message.length) {
           buffer = buffer.subarray(4 + buffer.readInt32BE(0));
-          continue;
         }
+      } else {
         break;
-      } else break;
+      }
     }
-    return buffers;
+    if (buffer.length !== 0) return [buffers, buffer];
+    else return [buffers, null];
   }
 
   onConnected(connectionListener: (...args: any) => void): this {
