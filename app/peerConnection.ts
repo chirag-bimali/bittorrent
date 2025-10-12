@@ -166,19 +166,20 @@ export class PeerConnection {
       ) {
         if (buffer.length > 68) {
           const message = buffer.subarray(0, 68);
-          buffer = buffer.subarray(68);
+          buffer = buffer.subarray(69);
           buffers.push(message);
           continue;
         }
         buffers.push(buffer);
       } else if (buffer.length >= 4 && buffer.readInt32BE(0) === 0) {
         // keep-alive message
-        const message = buffer.subarray(0, 3);
-        buffers.push(message);
         if (buffer.length > 4) {
-          buffer = buffer.subarray(3);
+          const message = buffer.subarray(0, 3);
+          buffers.push(message);
+          buffer = buffer.subarray(4);
           continue;
         }
+        buffers.push(buffer);
         break;
       } else if (
         buffer.length >= 4 &&
@@ -189,6 +190,7 @@ export class PeerConnection {
         buffers.push(message);
         if (buffer.length > message.length) {
           buffer = buffer.subarray(4 + buffer.readInt32BE(0));
+          continue;
         }
       } else {
         break;
