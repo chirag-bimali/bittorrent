@@ -157,21 +157,10 @@ async function downloadPiece() {
       console.log(`Connected to '${peerIp}:${peerPort}'`);
     });
     connection.handshake(torrent.infoHash, torrent.clientId);
+    connection.listen();
     connection.onData("keep-alive", (): boolean => {
       console.log(`Keeping alive`);
       return true;
-    });
-    connection.listen()
-    connection.onData("handshake", () => {
-      console.log(`Handshake successfull`);
-    });
-    connection.interested();
-    connection.bitfield(torrent.pieces);
-    connection.onData("bitfield", () => {
-      console.log("Bitfield");
-    });
-    connection.onData("unchoke", () => {
-      console.log(`Unchoked!`);
     });
   } catch (error: any) {
     console.error(error.message);

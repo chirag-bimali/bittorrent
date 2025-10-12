@@ -1,238 +1,19 @@
-import type { Socket } from "net";
+import { Socket } from "net";
 import { type MessageTypes, type Peer, type Piece } from "./types";
 
 const net = require("net");
 
-export class TorrentMessage {
+export class Request {
   public rawBuffer: Buffer;
-  public messageType: string;
-  public payload: string | null;
+  public type: MessageTypes;
+  public payload?: string | null = null;
 
-  constructor(rawBuffer: Buffer, messageType: string, payload: string | null) {
+  constructor(rawBuffer: Buffer) {
     this.rawBuffer = rawBuffer;
-    this.messageType = messageType;
-    this.payload = payload;
-  }
-}
-
-export class PeerConnection {
-  public peer: Peer;
-  public connection: Socket;
-  public readonly PROTOCOL_NAME = "BitTorrent protocol";
-  public infoHash?: Buffer;
-  public choked: boolean = true;
-  public pendingBuffer: Buffer = Buffer.alloc(0);
-  private events: Record<string, (...args: any[]) => void> = {};
-
-  constructor(peer: Peer) {
-    this.peer = peer;
-
-    this.connection = net.createConnection(
-      { host: peer.host, port: peer.port },
-      () => {
-        console.log(
-          `TCP connection established with ${peer.host}:${peer.port}`
-        );
-      }
-    );
+    this.type = this.messageType(rawBuffer);
   }
 
-  handshake(
-    infoHash: Buffer<ArrayBuffer>,
-    clientId: Buffer<ArrayBuffer>
-  ): void {
-    this.infoHash = infoHash;
-    const protocalName = Buffer.from("BitTorrent protocol");
-    const lengthPrefix = Buffer.from([protocalName.length]);
-    const reservedBytes = Buffer.alloc(8, 0);
-    const handshake = Buffer.concat([
-      lengthPrefix,
-      protocalName,
-      reservedBytes,
-      infoHash,
-      clientId,
-    ]);
-    this.connection.write(handshake);
-  }
-  listen() {
-    this.connection.on("data", (buffer: Buffer) => {
-      const buffers = this.onRawDataParser(buffer);
-      for (const buf of buffers) {
-        this.events[this.messageType(buf)]?.(buf);
-      }
-    });
-  }
-  private onRawDataParser(buf: Buffer): Buffer[] {
-    const buffers: Buffer[] = [];
-
-    let buffer = buf;
-    while (buffer.length !== 0) {
-      if (
-        buffer[0] === 19 &&
-        buffer.subarray(1, 20).toString("binary") === `BitTorrent protocol`
-      ) {
-        if (buffer.length > 68) {
-          const message = buffer.subarray(0, 68);
-          buffer = buffer.subarray(68);
-          buffers.push(message);
-          continue;
-        }
-        buffers.push(buffer);
-      } else if (buffer.length >= 4 && buffer.readInt32BE(0) === 0) {
-        // keep-alive message
-        const message = buffer.subarray(0, 3);
-        buffers.push(message);
-        if (buffer.length > 4) {
-          buffer = buffer.subarray(3);
-          continue;
-        }
-        break;
-      } else if (
-        buffer.length >= 4 &&
-        buffer.readInt32BE(0) !== 0 &&
-        buffer.length >= buffer.readInt32BE(0)
-      ) {
-        // messages
-        if (buffer.readInt32BE(0) < buffer.subarray(3).length) {
-          buffers.push(buffer);
-          break;
-        }
-
-        const message = buffer.subarray(0, buffer.readInt32BE(0) + 4);
-        buffers.push(message);
-
-        // 4 byte for length prefix
-        if (buffer.length > message.length) {
-          buffer = buffer.subarray(4 + buffer.readInt32BE(0));
-          continue;
-        }
-        break;
-      } else break;
-    }
-    return buffers;
-  }
-  interested() {
-    this.connection.write(Buffer.from([0, 0, 0, 1, 2]));
-  }
-  bitfield(pieces: Piece[]) {
-    const numbBytes = Math.ceil(pieces.length / 8);
-    const bitfield = Buffer.alloc(numbBytes, 0);
-
-    for (let i = 0; i < pieces.length; i++) {
-      if (pieces[i].have) {
-        const bitIndex = Math.floor(i % 8);
-        const bitOffset = 7 - (i % 8);
-        const mask = 1 << bitOffset;
-        bitfield[bitIndex] = bitfield[bitIndex] | mask;
-      }
-    }
-    this.connection.write(
-      Buffer.from([0, 0, 0, bitfield.length + 1, 5, ...bitfield])
-    );
-  }
-
-  onConnected(connectionListener: (...args: any) => void): this {
-    if (!this.connection) throw new Error(`PeerConnection not initialized`);
-    this.connection.on("connect", connectionListener);
-    return this;
-  }
-  request(piece: Piece) {}
-
-  onRawData(callBack: (buffer: Buffer) => void) {}
-
-  onData(messageType: "keep-alive", callBack: () => boolean): this;
-  onData(
-    messageType: "handshake",
-    callBack: (
-      lengthPrefix: number,
-      protocalName: string,
-      infoHash: Buffer,
-      peerId: Buffer
-    ) => void
-  ): this;
-
-  onData(messageType: "unchoke", callBack: () => void): this;
-  onData(messageType: "interested", callBack: () => void): this;
-  onData(messageType: "request", callBack: () => void): this;
-  onData(messageType: "piece", callBack: () => void): this;
-  onData(messageType: "bitfield", callBack: () => void): this;
-
-  onData(messageType: MessageTypes, callBack: (...args: any[]) => void): this {
-    this.events[messageType] = callBack;
-    this.onRawData((buffer) => {
-      if (messageType === "keep-alive") {
-        if (this.messageType(buffer) === "keep-alive") {
-          const result = (callBack as () => boolean)();
-          if (!result) {
-            this.connection.destroy();
-            return;
-          }
-          this.connection.write(Buffer.alloc(4, 0));
-        }
-        return;
-      }
-
-      if (messageType === "handshake") {
-        if (!(this.messageType(buffer) === "handshake")) return;
-        let readBytes = 0;
-        const lengthPrefix = buffer[readBytes];
-        readBytes = readBytes + 1;
-        if (lengthPrefix !== this.PROTOCOL_NAME.length)
-          throw new Error(`Invalid bittorent protocol handshake message`);
-
-        const protocalName = buffer
-          .subarray(readBytes, readBytes + lengthPrefix)
-          .toString();
-        if (protocalName !== this.PROTOCOL_NAME) {
-          this.connection.destroy();
-          throw new Error(`Invalid bittorent protocal handshake message`);
-        }
-
-        readBytes += lengthPrefix;
-
-        // 8 reserved bytes;
-        readBytes += 8;
-
-        // 20 bytes info hash
-        const infoHash = buffer.subarray(readBytes, readBytes + 20);
-        readBytes += 20;
-        if (!this.infoHash) throw new Error(`Info hash not found`);
-        if (this.infoHash && !infoHash.equals(this.infoHash)) {
-          this.connection.destroy();
-          throw new Error(`Info hash not matched`);
-        }
-
-        // 20 bytes for peer_id
-        const peerId = buffer.subarray(readBytes, readBytes + 20);
-        if (this.peer.id && !peerId.equals(this.peer.id)) {
-          this.connection.destroy();
-          throw new Error(`Peer id not matched`);
-        }
-        callBack();
-        return;
-      }
-      if (messageType === "unchoke") {
-        if (this.messageType(buffer) !== "unchoke") return;
-        this.choked = false;
-        callBack();
-        return;
-      }
-      if (messageType === "bitfield") {
-        if (this.messageType(buffer) !== "bitfield") return;
-        callBack();
-        return;
-      }
-      if (messageType === "interested") {
-        if (this.messageType(buffer) !== "interested") return;
-        callBack();
-        return;
-      }
-    });
-
-    return this;
-  }
-
-  messageType(buffer: Buffer<ArrayBufferLike>): MessageTypes {
+  public messageType(buffer: Buffer<ArrayBufferLike>): MessageTypes {
     if (
       buffer.every((value) => {
         return value == 0;
@@ -282,5 +63,152 @@ export class PeerConnection {
         throw new Error(`Message type not implemented for ${buffer[3]}`);
         break;
     }
+  }
+}
+
+export class Response {
+  /**
+   *
+   */
+  private connection: Socket;
+  constructor(socket: Socket) {
+    this.connection = socket;
+  }
+  interested() {
+    this.connection.write(Buffer.from([0, 0, 0, 1, 2]));
+  }
+  bitfield(pieces: Piece[]) {
+    const numbBytes = Math.ceil(pieces.length / 8);
+    const bitfield = Buffer.alloc(numbBytes, 0);
+
+    for (let i = 0; i < pieces.length; i++) {
+      if (pieces[i].have) {
+        const bitIndex = Math.floor(i % 8);
+        const bitOffset = 7 - (i % 8);
+        const mask = 1 << bitOffset;
+        bitfield[bitIndex] = bitfield[bitIndex] | mask;
+      }
+    }
+    this.connection.write(
+      Buffer.from([0, 0, 0, bitfield.length + 1, 5, ...bitfield])
+    );
+  }
+}
+
+export class PeerConnection {
+  public peer: Peer;
+  public connection: Socket;
+  public readonly PROTOCOL_NAME = "BitTorrent protocol";
+  public infoHash?: Buffer;
+  public choked: boolean = true;
+  private events: Record<
+    string,
+    (request: Request, response: Response) => void
+  > = {};
+
+  constructor(peer: Peer) {
+    this.peer = peer;
+
+    this.connection = net.createConnection(
+      { host: peer.host, port: peer.port },
+      () => {
+        console.log(
+          `TCP connection established with ${peer.host}:${peer.port}`
+        );
+      }
+    );
+  }
+
+  handshake(
+    infoHash: Buffer<ArrayBuffer>,
+    clientId: Buffer<ArrayBuffer>
+  ): void {
+    this.infoHash = infoHash;
+    const protocalName = Buffer.from("BitTorrent protocol");
+    const lengthPrefix = Buffer.from([protocalName.length]);
+    const reservedBytes = Buffer.alloc(8, 0);
+    const handshake = Buffer.concat([
+      lengthPrefix,
+      protocalName,
+      reservedBytes,
+      infoHash,
+      clientId,
+    ]);
+    this.connection.write(handshake);
+  }
+  listen() {
+    const response = new Response(this.connection);
+
+    this.connection.on("data", (buffer: Buffer) => {
+      const buffers = this.dataSplitter(buffer);
+      for (const buf of buffers) {
+        const request = new Request(buf);
+        this.events[request.messageType(buf)]?.(request, response);
+      }
+    });
+  }
+
+  public dataSplitter(buf: Buffer): Buffer[] {
+    const buffers: Buffer[] = [];
+
+    let buffer = buf;
+    while (buffer.length !== 0) {
+      if (
+        buffer[0] === 19 &&
+        buffer.subarray(1, 20).toString("binary") === `BitTorrent protocol`
+      ) {
+        if (buffer.length > 68) {
+          const message = buffer.subarray(0, 68);
+          buffer = buffer.subarray(68);
+          buffers.push(message);
+          continue;
+        }
+        buffers.push(buffer);
+      } else if (buffer.length >= 4 && buffer.readInt32BE(0) === 0) {
+        // keep-alive message
+        const message = buffer.subarray(0, 3);
+        buffers.push(message);
+        if (buffer.length > 4) {
+          buffer = buffer.subarray(3);
+          continue;
+        }
+        break;
+      } else if (
+        buffer.length >= 4 &&
+        buffer.readInt32BE(0) !== 0 &&
+        buffer.length >= buffer.readInt32BE(0)
+      ) {
+        // messages
+        if (buffer.readInt32BE(0) < buffer.subarray(3).length) {
+          buffers.push(buffer);
+          break;
+        }
+
+        const message = buffer.subarray(0, buffer.readInt32BE(0) + 4);
+        buffers.push(message);
+
+        // 4 byte for length prefix
+        if (buffer.length > message.length) {
+          buffer = buffer.subarray(4 + buffer.readInt32BE(0));
+          continue;
+        }
+        break;
+      } else break;
+    }
+    return buffers;
+  }
+
+  onConnected(connectionListener: (...args: any) => void): this {
+    if (!this.connection) throw new Error(`PeerConnection not initialized`);
+    this.connection.on("connect", connectionListener);
+    return this;
+  }
+
+  onData(
+    messageType: MessageTypes,
+    callBack: (request: Request, response: Response) => void
+  ): this {
+    this.events[messageType] = callBack;
+    return this;
   }
 }
