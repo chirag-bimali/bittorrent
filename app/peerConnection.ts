@@ -1,7 +1,7 @@
-import { Socket } from "net";
 import { type MessageTypes, type Peer, type Piece } from "./types";
+import type { Socket } from "net";
 
-const net = require("net");
+import * as net from "net"; // <- typed import so editor shows net.Socket, net.connect, etc.
 
 export class Request {
   public rawBuffer: Buffer;
@@ -74,6 +74,24 @@ export class Response {
   constructor(socket: Socket) {
     this.connection = socket;
   }
+
+  handshake(infoHash: Buffer, clientId: Buffer): void {
+    const protocalName = Buffer.from("BitTorrent protocol");
+    const lengthPrefix = Buffer.from([protocalName.length]);
+    const reservedBytes = Buffer.alloc(8, 0);
+    const handshake = Buffer.concat([
+      lengthPrefix,
+      protocalName,
+      reservedBytes,
+      infoHash,
+      clientId,
+    ]);
+    this.connection.write(handshake);
+  }
+
+  keepAlive() {
+    this.connection.write(Buffer.alloc(4, 0));
+  }
   interested() {
     this.connection.write(Buffer.from([0, 0, 0, 1, 2]));
   }
@@ -96,9 +114,11 @@ export class Response {
 }
 
 export class PeerConnection {
-  public peer: Peer;
+  public response: Response;
+  public clientId: Buffer;
   public connection: Socket;
   public readonly PROTOCOL_NAME = "BitTorrent protocol";
+  public peer?: Peer;
   public infoHash?: Buffer;
   public choked: boolean = true;
   private events: Record<
@@ -106,38 +126,32 @@ export class PeerConnection {
     (request: Request, response: Response) => void
   > = {};
 
-  constructor(peer: Peer) {
-    this.peer = peer;
+  constructor(peer: Peer, infoHash: Buffer, clientId: Buffer) {
+    // this.peer = peer;
+    // this.infoHashes.push(infoHash);
+    this.clientId = clientId;
+    this.connection = new net.Socket();
+    this.response = new Response(this.connection);
+  }
 
+  connect(peer: Peer, infoHash: Buffer, callback: (response: Response) => {}) {
+    this.peer = peer;
+    this.infoHash = infoHash;
     this.connection = net.createConnection(
       { host: peer.host, port: peer.port },
       () => {
-        console.log(
-          `TCP connection established with ${peer.host}:${peer.port}`
-        );
+        callback(this.response);
       }
     );
   }
 
-  handshake(
-    infoHash: Buffer<ArrayBuffer>,
-    clientId: Buffer<ArrayBuffer>
-  ): void {
-    this.infoHash = infoHash;
-    const protocalName = Buffer.from("BitTorrent protocol");
-    const lengthPrefix = Buffer.from([protocalName.length]);
-    const reservedBytes = Buffer.alloc(8, 0);
-    const handshake = Buffer.concat([
-      lengthPrefix,
-      protocalName,
-      reservedBytes,
-      infoHash,
-      clientId,
-    ]);
-    this.connection.write(handshake);
+  serve(port: number) {
+    const server = net.createServer((socket: Socket) => {});
+    server.listen(port);
   }
-  listen() {
-    const response = new Response(this.connection);
+
+  listen(callback: () => void) {
+    if (!this.connection) throw new Error(`Socket not initialized`);
 
     this.connection.on("data", (buffer: Buffer) => {
       let buffers: Buffer[];
@@ -150,9 +164,10 @@ export class PeerConnection {
       [buffers, leftover] = this.deserializeStream(buf);
       for (const buf of buffers) {
         const request = new Request(buf);
-        this.events[request.messageType(buf)]?.(request, response);
+        this.events[request.messageType(buf)]?.(request, this.response);
       }
     });
+    callback();
   }
 
   public deserializeStream(buf: Buffer): [Buffer[], Buffer | null] {
@@ -171,6 +186,7 @@ export class PeerConnection {
           continue;
         }
         buffers.push(buffer);
+        break;
       } else if (buffer.length >= 4 && buffer.readInt32BE(0) === 0) {
         // keep-alive message
         if (buffer.length > 4) {
@@ -192,9 +208,8 @@ export class PeerConnection {
           buffer = buffer.subarray(4 + buffer.readInt32BE(0));
           continue;
         }
-      } else {
         break;
-      }
+      } else break;
     }
     if (buffer.length !== 0) return [buffers, buffer];
     else return [buffers, null];

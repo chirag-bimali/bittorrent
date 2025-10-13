@@ -1,7 +1,6 @@
 const fs = require("fs");
 const crypto = require("crypto");
 const net = require("net");
-import type { Socket } from "net";
 
 import type {
   BencodeDecoderStatic,
@@ -14,7 +13,7 @@ const BencodeDecoder = BencodeDecoderDefault as BencodeDecoderStatic;
 
 import BencodeEncoderDefault from "./bencodeEncoder";
 import Torrent from "./torrent";
-import { PeerConnection } from "./peerConnection";
+import { PeerConnection, Request, Response } from "./peerConnection";
 const BencodeEncoder = BencodeEncoderDefault as BencodeEncoderStatic;
 
 function calculateSHA1IntoHex(data: string): string {
@@ -143,6 +142,7 @@ async function downloadPiece() {
     const torrentString = torrentData.toString("binary");
 
     const [peerIp, peerPort] = peerLocation.split(":");
+    const clientId = generateId(20);
 
     const torrent: Torrent = new Torrent(torrentString);
 
@@ -152,15 +152,14 @@ async function downloadPiece() {
     });
     if (!matched) throw new Error(`Peers '${peerIp}:${peerPort}' not found`);
 
-    const connection = new PeerConnection(matched);
-    connection.onConnected(() => {
-      console.log(`Connected to '${peerIp}:${peerPort}'`);
+    const connection = new PeerConnection(matched, torrent.infoHash, clientId);
+    connection.listen(() => console.log(`Listening...`));
+    connection.onData("keep-alive", (request: Request, response: Response) => {
+      console.log(request);
+      response.keepAlive();
     });
-    connection.handshake(torrent.infoHash, torrent.clientId);
-    connection.listen();
-    connection.onData("keep-alive", (): boolean => {
-      console.log(`Keeping alive`);
-      return true;
+    connection.onData("handshake", (request: Request, response: Response) => {
+      console.log(`Handshooked succesfully`);
     });
   } catch (error: any) {
     console.error(error.message);
