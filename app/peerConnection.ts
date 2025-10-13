@@ -118,8 +118,8 @@ export class PeerConnection {
   public clientId: Buffer;
   public connection: Socket;
   public readonly PROTOCOL_NAME = "BitTorrent protocol";
-  public peer?: Peer;
-  public infoHash?: Buffer;
+  public peer: Peer;
+  public infoHash: Buffer;
   public choked: boolean = true;
   private events: Record<
     string,
@@ -127,27 +127,20 @@ export class PeerConnection {
   > = {};
 
   constructor(peer: Peer, infoHash: Buffer, clientId: Buffer) {
-    // this.peer = peer;
-    // this.infoHashes.push(infoHash);
+    this.peer = peer;
+    this.infoHash = infoHash;
     this.clientId = clientId;
     this.connection = new net.Socket();
     this.response = new Response(this.connection);
   }
 
-  connect(peer: Peer, infoHash: Buffer, callback: (response: Response) => {}) {
-    this.peer = peer;
-    this.infoHash = infoHash;
-    this.connection = net.createConnection(
-      { host: peer.host, port: peer.port },
+  connect(callback: (response: Response) => {}) {
+    this.connection = net.connect(
+      { host: this.peer.host, port: this.peer.port },
       () => {
         callback(this.response);
       }
     );
-  }
-
-  serve(port: number) {
-    const server = net.createServer((socket: Socket) => {});
-    server.listen(port);
   }
 
   listen(callback: () => void) {
