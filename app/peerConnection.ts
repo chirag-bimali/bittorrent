@@ -199,7 +199,7 @@ export class PeerConnection {
       ) {
         if (buffer.length > 68) {
           const message = buffer.subarray(0, 68);
-          buffer = buffer.subarray(69);
+          buffer = buffer.subarray(68);
           buffers.push(message);
           continue;
         }
