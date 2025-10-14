@@ -6,11 +6,19 @@ import * as net from "net"; // <- typed import so editor shows net.Socket, net.c
 export class Request {
   public rawBuffer: Buffer;
   public type: MessageTypes;
-  public payload?: string | null = null;
+  public data?: Buffer | null = null;
+  public infoHash: Buffer | null = null;
+  public peerId: Buffer | null = null;
 
   constructor(rawBuffer: Buffer) {
     this.rawBuffer = rawBuffer;
     this.type = this.messageType(rawBuffer);
+    if (this.type === "handshake") {
+      console.log(this.rawBuffer.length);
+      this.infoHash = this.rawBuffer.subarray(28, 48);
+      this.peerId = this.rawBuffer.subarray(48, 68);
+    }
+    this.data = rawBuffer.subarray(5, this.rawBuffer.readInt32BE(0) - 1);
   }
 
   public messageType(buffer: Buffer<ArrayBufferLike>): MessageTypes {
@@ -115,7 +123,6 @@ export class Response {
 
 export class PeerConnection {
   public response: Response | null = null;
-  public clientId: Buffer;
   public connection: Socket | null = null;
   public readonly PROTOCOL_NAME = "BitTorrent protocol";
   public peer: Peer;
@@ -126,10 +133,9 @@ export class PeerConnection {
     (request: Request, response: Response) => void
   > = {};
 
-  constructor(peer: Peer, infoHash: Buffer, clientId: Buffer) {
+  constructor(peer: Peer, infoHash: Buffer) {
     this.peer = peer;
     this.infoHash = infoHash;
-    this.clientId = clientId;
   }
 
   connect(callback?: (response: Response) => void) {

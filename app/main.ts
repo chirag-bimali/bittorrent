@@ -152,17 +152,26 @@ async function downloadPiece() {
     });
     if (!matched) throw new Error(`Peers '${peerIp}:${peerPort}' not found`);
 
-    const connection = new PeerConnection(matched, torrent.infoHash, clientId);
-    connection.connect();
+    const connection = new PeerConnection(matched, torrent.infoHash);
+    connection.connect((response: Response) => {
+      response.handshake(torrent.infoHash, clientId);
+    });
     connection.listen(() => console.log(`Listening...`));
 
     connection.onData("keep-alive", (request: Request, response: Response) => {
       console.log(request);
+      console.log(request.data);
       response.keepAlive();
     });
     connection.onData("handshake", (request: Request, response: Response) => {
       console.log(`Handshooked succesfully`);
+      console.log(request.infoHash, request.peerId);
     });
+    connection.onData("bitfield", (request: Request, response: Response) => {
+      console.log("Bitfield");
+      console.log(request.rawBuffer);
+    });
+    console.log(torrent);
   } catch (error: any) {
     console.error(error.message);
     console.error(`Exiting...`);
