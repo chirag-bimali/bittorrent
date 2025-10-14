@@ -132,13 +132,13 @@ export class PeerConnection {
     this.clientId = clientId;
   }
 
-  connect(callback: (response: Response) => {}) {
+  connect(callback?: (response: Response) => void) {
     this.connection = net.createConnection(
       { host: this.peer.host, port: this.peer.port },
       () => {
         if (this.connection) {
           this.response = new Response(this.connection);
-          callback(this.response);
+          if (callback) callback(this.response);
         }
       }
     );

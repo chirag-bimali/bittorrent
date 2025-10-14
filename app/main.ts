@@ -153,8 +153,9 @@ async function downloadPiece() {
     if (!matched) throw new Error(`Peers '${peerIp}:${peerPort}' not found`);
 
     const connection = new PeerConnection(matched, torrent.infoHash, clientId);
+    connection.connect();
     connection.listen(() => console.log(`Listening...`));
-    
+
     connection.onData("keep-alive", (request: Request, response: Response) => {
       console.log(request);
       response.keepAlive();
