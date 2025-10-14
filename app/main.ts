@@ -165,13 +165,19 @@ async function downloadPiece() {
     });
     connection.onData("handshake", (request: Request, response: Response) => {
       console.log(`Handshooked succesfully`);
-      console.log(request.infoHash, request.peerId);
     });
     connection.onData("bitfield", (request: Request, response: Response) => {
       console.log("Bitfield");
+      const payload = request.rawBuffer.subarray(
+        3 + 2,
+        3 + 2 + request.rawBuffer.readInt32BE(0)
+      );
+
+      request.readBitByBit(payload, (bit, byteIndex, bitIndex) => {
+        console.log(`${bit}\t${byteIndex}\t${bitIndex}`);
+      });
       console.log(request.rawBuffer);
     });
-    console.log(torrent);
   } catch (error: any) {
     console.error(error.message);
     console.error(`Exiting...`);

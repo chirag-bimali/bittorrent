@@ -14,11 +14,27 @@ export class Request {
     this.rawBuffer = rawBuffer;
     this.type = this.messageType(rawBuffer);
     if (this.type === "handshake") {
-      console.log(this.rawBuffer.length);
       this.infoHash = this.rawBuffer.subarray(28, 48);
       this.peerId = this.rawBuffer.subarray(48, 68);
     }
+    if (this.type === "bitfield") {
+    }
     this.data = rawBuffer.subarray(5, this.rawBuffer.readInt32BE(0) - 1);
+  }
+  bitfieldDecoder(): Piece[] {
+    throw new Error("Not implemetented yet");
+  }
+  readBitByBit(
+    buffer: Buffer,
+    callback: (bit: 0 | 1, byteIndex: number, bitIndex: number) => void
+  ) {
+    const bytesNum = buffer.length;
+    for (let i = 0; i < 8 * bytesNum; i++) {
+      const byteIndex = Math.floor(i / 8);
+      const mask = 1 << (7 - i);
+      const bit = (buffer[byteIndex] & mask) === 0 ? 0 : 1;
+      callback(bit, byteIndex, i);
+    }
   }
 
   public messageType(buffer: Buffer<ArrayBufferLike>): MessageTypes {
