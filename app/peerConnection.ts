@@ -21,9 +21,6 @@ export class Request {
     }
     this.data = rawBuffer.subarray(5, this.rawBuffer.readInt32BE(0) - 1);
   }
-  bitfieldDecoder(): Piece[] {
-    throw new Error("Not implemetented yet");
-  }
   readBitByBit(
     buffer: Buffer,
     callback: (bit: 0 | 1, byteIndex: number, bitIndex: number) => void
@@ -142,6 +139,7 @@ export class PeerConnection {
   public connection: Socket | null = null;
   public readonly PROTOCOL_NAME = "BitTorrent protocol";
   public peer: Peer;
+  public pieces: Piece[] = [];
   public infoHash: Buffer;
   public choked: boolean = true;
   private events: Record<
@@ -149,9 +147,14 @@ export class PeerConnection {
     (request: Request, response: Response) => void
   > = {};
 
-  constructor(peer: Peer, infoHash: Buffer) {
+  constructor(peer: Peer, infoHash: Buffer, pieces: Piece[]) {
     this.peer = peer;
     this.infoHash = infoHash;
+    pieces.forEach((value) => {
+      const val = value;
+      val.have = false;
+      this.pieces.push(value);
+    });
   }
 
   connect(callback?: (response: Response) => void) {
@@ -209,6 +212,7 @@ export class PeerConnection {
         `Socket is not connected. readyState ${this.connection.readyState}`
       );
   }
+
 
   public deserializeStream(buf: Buffer): [Buffer[], Buffer | null] {
     const buffers: Buffer[] = [];

@@ -6,6 +6,7 @@ import type {
   BencodeDecoderStatic,
   BencodeEncoderStatic,
   Dictionary,
+  Piece,
 } from "./types";
 
 import BencodeDecoderDefault from "./bencodeDecoder";
@@ -152,7 +153,11 @@ async function downloadPiece() {
     });
     if (!matched) throw new Error(`Peers '${peerIp}:${peerPort}' not found`);
 
-    const connection = new PeerConnection(matched, torrent.infoHash);
+    const connection = new PeerConnection(
+      matched,
+      torrent.infoHash,
+      torrent.pieces
+    );
     connection.connect((response: Response) => {
       response.handshake(torrent.infoHash, clientId);
     });
@@ -174,9 +179,15 @@ async function downloadPiece() {
       );
 
       request.readBitByBit(payload, (bit, byteIndex, bitIndex) => {
+        const have = bit === 1;
+        const index = byteIndex * 8 + bitIndex;
+
+        if (index < connection.pieces.length) {
+          connection.pieces[index].have = have;
+        }
         console.log(`${bit}\t${byteIndex}\t${bitIndex}`);
       });
-      console.log(request.rawBuffer);
+      response.bitfield(torrent.pieces);
     });
   } catch (error: any) {
     console.error(error.message);
