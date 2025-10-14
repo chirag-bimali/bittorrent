@@ -154,6 +154,7 @@ async function downloadPiece() {
 
     const connection = new PeerConnection(matched, torrent.infoHash, clientId);
     connection.listen(() => console.log(`Listening...`));
+    
     connection.onData("keep-alive", (request: Request, response: Response) => {
       console.log(request);
       response.keepAlive();

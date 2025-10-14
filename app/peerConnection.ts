@@ -114,9 +114,9 @@ export class Response {
 }
 
 export class PeerConnection {
-  public response: Response;
+  public response: Response | null = null;
   public clientId: Buffer;
-  public connection: Socket;
+  public connection: Socket | null = null;
   public readonly PROTOCOL_NAME = "BitTorrent protocol";
   public peer: Peer;
   public infoHash: Buffer;
@@ -130,37 +130,62 @@ export class PeerConnection {
     this.peer = peer;
     this.infoHash = infoHash;
     this.clientId = clientId;
-    this.connection = new net.Socket();
-    this.response = new Response(this.connection);
   }
 
   connect(callback: (response: Response) => {}) {
-    this.connection = net.connect(
+    this.connection = net.createConnection(
       { host: this.peer.host, port: this.peer.port },
       () => {
-        callback(this.response);
+        if (this.connection) {
+          this.response = new Response(this.connection);
+          callback(this.response);
+        }
       }
     );
   }
 
-  listen(callback: () => void) {
+  listen(callback: () => void | null) {
     if (!this.connection) throw new Error(`Socket not initialized`);
 
-    this.connection.on("data", (buffer: Buffer) => {
-      let buffers: Buffer[];
-      let leftover: Buffer | null = null;
-      let buf = buffer;
+    const setupListeners = () => {
+      if (this.connection === null) throw new Error(`Socket not initialized`);
+      this.connection.on("data", (buffer: Buffer) => {
+        if (this.response === null) throw new Error(`Response not initialized`);
+        let buffers: Buffer[];
+        let leftover: Buffer | null = null;
+        let buf = buffer;
 
-      if (leftover !== null) {
-        buf = Buffer.concat([leftover, buffer]);
-      }
-      [buffers, leftover] = this.deserializeStream(buf);
-      for (const buf of buffers) {
-        const request = new Request(buf);
-        this.events[request.messageType(buf)]?.(request, this.response);
-      }
-    });
-    callback();
+        if (leftover !== null) {
+          buf = Buffer.concat([leftover, buffer]);
+        }
+        [buffers, leftover] = this.deserializeStream(buf);
+        for (const buf of buffers) {
+          const request = new Request(buf);
+          this.events[request.messageType(buf)]?.(request, this.response);
+        }
+      });
+
+      this.connection.on("error", (err) => {
+        throw new Error(err.message);
+      });
+      this.connection.on("close", () => {
+        console.log(`Connection closed`);
+      });
+      if (callback) callback();
+    };
+    if (this.connection.readyState === "open") {
+      setupListeners();
+    } else if (
+      this.connection.connecting ||
+      this.connection.readyState === "opening"
+    ) {
+      this.connection.once("connect", () => {
+        setupListeners();
+      });
+    } else
+      throw new Error(
+        `Socket is not connected. readyState ${this.connection.readyState}`
+      );
   }
 
   public deserializeStream(buf: Buffer): [Buffer[], Buffer | null] {
