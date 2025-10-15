@@ -37,6 +37,7 @@ export type Peer = {
 };
 
 export type Piece = {
-  index: Buffer;
+  index: number;
+  hash: Buffer;
   have: boolean;
 };

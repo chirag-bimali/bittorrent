@@ -109,6 +109,21 @@ export class Response {
     ]);
     this.connection.write(handshake);
   }
+  request(piece: Piece, begin: number, length: number) {
+    const message = Buffer.concat([
+      Buffer.from([Buffer.alloc(4).writeInt32BE(13), 6]),
+      Buffer.from([
+        Buffer.alloc(4).writeInt32BE(piece.index),
+        Buffer.alloc(4).writeInt32BE(begin),
+        Buffer.alloc(4).writeInt32BE(length),
+      ]),
+    ]);
+    // const messageLength = Buffer.alloc(4);
+    // messageLength.writeInt32BE(message.length);
+
+    // const totalMessage = Buffer.concat([messageLength, message]);
+    this.connection.write(message);
+  }
 
   keepAlive() {
     this.connection.write(Buffer.alloc(4, 0));
@@ -151,9 +166,11 @@ export class PeerConnection {
     this.peer = peer;
     this.infoHash = infoHash;
     pieces.forEach((value) => {
-      const val = value;
-      val.have = false;
-      this.pieces.push(value);
+      this.pieces.push({
+        hash: value.hash,
+        index: value.index,
+        have: false,
+      });
     });
   }
 
@@ -212,7 +229,6 @@ export class PeerConnection {
         `Socket is not connected. readyState ${this.connection.readyState}`
       );
   }
-
 
   public deserializeStream(buf: Buffer): [Buffer[], Buffer | null] {
     const buffers: Buffer[] = [];

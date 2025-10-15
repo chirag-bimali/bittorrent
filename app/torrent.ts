@@ -43,7 +43,8 @@ export default class Torrent {
       i += this.PIECE_INDEX_LENGTH
     ) {
       this.pieces.push({
-        index: this.decoded.info.pieces.substring(
+        index: i,
+        hash: this.decoded.info.pieces.substring(
           i,
           i + this.PIECE_INDEX_LENGTH
         ),

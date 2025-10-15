@@ -185,9 +185,35 @@ async function downloadPiece() {
         if (index < connection.pieces.length) {
           connection.pieces[index].have = have;
         }
-        console.log(`${bit}\t${byteIndex}\t${bitIndex}`);
       });
       response.bitfield(torrent.pieces);
+      response.interested();
+    });
+    connection.onData("unchoke", (request, response) => {
+      // since i am unchoked
+      // now i need to request a piece
+      //  - first check which piece do i want
+      //    how? i can go to the torrent and check for the pieces that i have
+      // - request that piece
+      // - confirm the hash
+      // - save it to disk
+      // - update torrent file(sample.torrent)
+      // - send have message
+      for (const piece of torrent.pieces) {
+        if (!piece.have) {
+          response.request(piece, 0, Math.pow(2, 14));
+          break;
+        }
+      }
+
+      console.log(`Unchoked`);
+    });
+    connection.onData("piece", (request: Request, response: Response) => {
+      console.log(`Piece`);
+      console.log(request.rawBuffer);
+    });
+    connection.onData("choke", (request: Request, response: Response) => {
+      console.log(`choked`);
     });
   } catch (error: any) {
     console.error(error.message);
