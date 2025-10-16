@@ -185,6 +185,7 @@ async function downloadPiece() {
           connection.pieces[index].have = have;
         }
       });
+      console.log(torrent.pieces)
       response.bitfield(torrent.pieces);
       response.interested();
     });

@@ -53,7 +53,7 @@ export default class Torrent {
       const temp = totalLength;
       totalLength = totalLength - pieceLength;
       this.pieces.push({
-        index: i,
+        index: i / this.PIECE_INDEX_LENGTH,
         hash: this.decoded.info.pieces.substring(
           i,
           i + this.PIECE_INDEX_LENGTH
