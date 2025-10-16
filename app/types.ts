@@ -11,7 +11,8 @@ export type MessageTypes =
   | "bitfield"
   | "request"
   | "piece"
-  | "cancel";
+  | "cancel"
+  | "unknown";
 
 export interface BencodeDecoderStatic {
   decodeBencodeString: (bencodedValue: string) => [string, number];

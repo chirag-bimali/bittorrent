@@ -17,9 +17,12 @@ export class Request {
       this.infoHash = this.rawBuffer.subarray(28, 48);
       this.peerId = this.rawBuffer.subarray(48, 68);
     }
-    if (this.type === "bitfield") {
+    if (this.type !== "handshake" && this.type !== "keep-alive") {
+      const messageLength = this.rawBuffer.readInt32BE(0);
+      if (messageLength > 1) {
+        this.data = rawBuffer.subarray(5, this.rawBuffer.readInt32BE(0) + 4);
+      }
     }
-    this.data = rawBuffer.subarray(5, this.rawBuffer.readInt32BE(0) - 1);
   }
   readBitByBit(
     buffer: Buffer,
@@ -80,9 +83,13 @@ export class Request {
       case 8:
         return "cancel";
         break;
-      default:
-        throw new Error(`Message type not implemented for ${buffer[3]}`);
-        break;
+      default: {
+        console.warn(
+          `⚠️  Unknown message ID: ${buffer[4]} (0x${buffer[4].toString(16)})`
+        );
+        console.warn(`   Full buffer: ${buffer.toString("hex")}`);
+        return "unknown";
+      }
     }
   }
 }
@@ -110,19 +117,27 @@ export class Response {
     this.connection.write(handshake);
   }
   request(piece: Piece, begin: number, length: number) {
-    const message = Buffer.concat([
-      Buffer.from([Buffer.alloc(4).writeInt32BE(13), 6]),
-      Buffer.from([
-        Buffer.alloc(4).writeInt32BE(piece.index),
-        Buffer.alloc(4).writeInt32BE(begin),
-        Buffer.alloc(4).writeInt32BE(length),
-      ]),
-    ]);
-    // const messageLength = Buffer.alloc(4);
-    // messageLength.writeInt32BE(message.length);
+    const pieceIndexBuffer = Buffer.alloc(4);
+    pieceIndexBuffer.writeInt32BE(piece.index);
 
-    // const totalMessage = Buffer.concat([messageLength, message]);
-    this.connection.write(message);
+    const beginBuffer = Buffer.alloc(4);
+    beginBuffer.writeInt32BE(begin);
+
+    const lengthBuffer = Buffer.alloc(4);
+    lengthBuffer.writeInt32BE(length);
+
+    const message = Buffer.concat([
+      Buffer.from([6]),
+      pieceIndexBuffer,
+      beginBuffer,
+      lengthBuffer,
+    ]);
+
+    const messageLength = Buffer.alloc(4);
+    messageLength.writeInt32BE(message.length);
+
+    const totalMessage = Buffer.concat([messageLength, message]);
+    this.connection.write(totalMessage);
   }
 
   keepAlive() {
@@ -191,10 +206,10 @@ export class PeerConnection {
 
     const setupListeners = () => {
       if (this.connection === null) throw new Error(`Socket not initialized`);
+      let leftover: Buffer | null = null;
       this.connection.on("data", (buffer: Buffer) => {
         if (this.response === null) throw new Error(`Response not initialized`);
         let buffers: Buffer[];
-        let leftover: Buffer | null = null;
         let buf = buffer;
 
         if (leftover !== null) {
@@ -247,7 +262,8 @@ export class PeerConnection {
         }
         buffers.push(buffer);
         break;
-      } else if (buffer.length >= 4 && buffer.readInt32BE(0) === 0) {
+      }
+      if (buffer.length >= 4 && buffer.readInt32BE(0) === 0) {
         // keep-alive message
         if (buffer.length > 4) {
           const message = buffer.subarray(0, 3);
@@ -257,7 +273,8 @@ export class PeerConnection {
         }
         buffers.push(buffer);
         break;
-      } else if (
+      }
+      if (
         buffer.length >= 4 &&
         buffer.readInt32BE(0) !== 0 &&
         buffer.subarray(4).length >= buffer.readInt32BE(0)
@@ -269,7 +286,8 @@ export class PeerConnection {
           continue;
         }
         break;
-      } else break;
+      }
+      break;
     }
     if (buffer.length !== 0) return [buffers, buffer];
     else return [buffers, null];

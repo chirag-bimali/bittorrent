@@ -209,8 +209,7 @@ async function downloadPiece() {
       console.log(`Unchoked`);
     });
     connection.onData("piece", (request: Request, response: Response) => {
-      console.log(`Piece`);
-      console.log(request.rawBuffer);
+      console.log("piece received");
     });
     connection.onData("choke", (request: Request, response: Response) => {
       console.log(`choked`);
