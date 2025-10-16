@@ -164,8 +164,7 @@ async function downloadPiece() {
     connection.listen(() => console.log(`Listening...`));
 
     connection.onData("keep-alive", (request: Request, response: Response) => {
-      console.log(request);
-      console.log(request.data);
+      console.log(`Keeping alive...`);
       response.keepAlive();
     });
     connection.onData("handshake", (request: Request, response: Response) => {

@@ -214,11 +214,12 @@ export class PeerConnection {
 
         if (leftover !== null) {
           buf = Buffer.concat([leftover, buffer]);
+          leftover = null;
         }
         [buffers, leftover] = this.deserializeStream(buf);
         for (const buf of buffers) {
           const request = new Request(buf);
-          this.events[request.messageType(buf)]?.(request, this.response);
+          this.events[request.type]?.(request, this.response);
         }
       });
 
@@ -250,6 +251,7 @@ export class PeerConnection {
 
     let buffer = buf;
     while (buffer.length !== 0) {
+      // handshake
       if (
         buffer[0] === 19 &&
         buffer.subarray(1, 20).toString("binary") === `BitTorrent protocol`
@@ -263,17 +265,20 @@ export class PeerConnection {
         buffers.push(buffer);
         break;
       }
+
+      // keep-alive message
       if (buffer.length >= 4 && buffer.readInt32BE(0) === 0) {
-        // keep-alive message
         if (buffer.length > 4) {
           const message = buffer.subarray(0, 3);
           buffers.push(message);
           buffer = buffer.subarray(4);
           continue;
         }
-        buffers.push(buffer);
+        if (buffer.length === 4) buffers.push(buffer);
         break;
       }
+
+      // messages
       if (
         buffer.length >= 4 &&
         buffer.readInt32BE(0) !== 0 &&
@@ -285,6 +290,7 @@ export class PeerConnection {
           buffer = buffer.subarray(4 + buffer.readInt32BE(0));
           continue;
         }
+        buffer = Buffer.alloc(0);
         break;
       }
       break;
