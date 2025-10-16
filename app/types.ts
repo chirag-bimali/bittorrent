@@ -41,4 +41,6 @@ export type Piece = {
   index: number;
   hash: Buffer;
   have: boolean;
+  data: Buffer | null;
+  length: number;
 };

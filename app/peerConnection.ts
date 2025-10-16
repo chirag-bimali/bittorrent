@@ -185,6 +185,8 @@ export class PeerConnection {
         hash: value.hash,
         index: value.index,
         have: false,
+        length: value.length,
+        data: value.data
       });
     });
   }
