@@ -186,7 +186,7 @@ export class PeerConnection {
         index: value.index,
         have: false,
         length: value.length,
-        data: value.data
+        data: value.data,
       });
     });
   }
@@ -268,21 +268,21 @@ export class PeerConnection {
         break;
       }
 
-      // keep-alive message
-      if (buffer.length >= 4 && buffer.readInt32BE(0) === 0) {
+      if (buffer.length <= 4) break;
+      if (buffer.readInt32BE(0) === 0) {
+        // keep-alive message
         if (buffer.length > 4) {
           const message = buffer.subarray(0, 3);
           buffers.push(message);
           buffer = buffer.subarray(4);
           continue;
         }
-        if (buffer.length === 4) buffers.push(buffer);
+        buffers.push(buffer);
         break;
       }
 
       // messages
       if (
-        buffer.length >= 4 &&
         buffer.readInt32BE(0) !== 0 &&
         buffer.subarray(4).length >= buffer.readInt32BE(0)
       ) {
