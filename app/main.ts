@@ -198,22 +198,17 @@ async function downloadPiece() {
       // - save it to disk
       // - update torrent file(sample.torrent)
       // - send have message
-      const requestLength = Math.pow(2, 14);
+      const length = Math.pow(2, 13); // 8192
       for (const piece of torrent.pieces) {
         let begin = 0;
         if (!piece.have) {
-          for (
-            let length =
-              requestLength < piece.length ? requestLength : piece.length;
-            length < piece.length;
-            length =
-              begin + requestLength > piece.length
-                ? piece.length - begin
-                : requestLength
-          ) {
-            response.request(piece, begin, length);
-            console.log(piece, begin, length);
-            begin += requestLength;
+          while (begin < piece.length) {
+            response.request(
+              piece,
+              begin,
+              begin + length > piece.length ? piece.length - begin : length
+            );
+            begin += length;
           }
         }
       }
@@ -221,14 +216,12 @@ async function downloadPiece() {
       console.log(`Unchoked`);
     });
     connection.onData("piece", (request: Request, response: Response) => {
-      console.log("piece received");
       const index = connection.pieces.findIndex((piece) => {
         return request.piece?.index === piece.index;
       });
-      if (request.piece)
-        connection.pieces[index].data[request.piece.index][
-          request.piece.begin
-        ] = request.piece.data;
+      if (request.piece?.data) {
+        connection.pieces[index].data.push({begin: request.piece.begin, data: request.piece.data});
+      }
     });
     connection.onData("choke", (request: Request, response: Response) => {
       console.log(`choked`);

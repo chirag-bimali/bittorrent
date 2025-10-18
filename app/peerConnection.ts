@@ -2,7 +2,6 @@ import {
   type MessageTypes,
   type Peer,
   type Piece,
-  type PieceStorage,
 } from "./types";
 import type { Socket } from "net";
 

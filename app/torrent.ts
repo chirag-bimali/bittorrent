@@ -60,7 +60,7 @@ export default class Torrent {
         ),
         have: false,
         length: totalLength < 0 ? temp : pieceLength,
-        data: {},
+        data: [],
       });
     }
 
