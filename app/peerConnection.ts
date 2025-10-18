@@ -1,4 +1,9 @@
-import { type MessageTypes, type Peer, type Piece } from "./types";
+import {
+  type MessageTypes,
+  type Peer,
+  type Piece,
+  type PieceStorage,
+} from "./types";
 import type { Socket } from "net";
 
 import * as net from "net"; // <- typed import so editor shows net.Socket, net.connect, etc.
@@ -9,6 +14,7 @@ export class Request {
   public data?: Buffer | null = null;
   public infoHash: Buffer | null = null;
   public peerId: Buffer | null = null;
+  public piece: { begin: number; index: number; data: Buffer } | null = null;
 
   constructor(rawBuffer: Buffer) {
     this.rawBuffer = rawBuffer;
@@ -22,6 +28,17 @@ export class Request {
       if (messageLength > 1) {
         this.data = rawBuffer.subarray(5, this.rawBuffer.readInt32BE(0) + 4);
       }
+    }
+    if (this.type === "piece") {
+      let dataStart = 0;
+      dataStart += 4;
+      dataStart++;
+      const index = this.rawBuffer.readInt32BE(dataStart);
+      dataStart += 4;
+      const begin = this.rawBuffer.readInt32BE(dataStart);
+      dataStart += 4;
+      const data = this.rawBuffer.subarray(dataStart);
+      this.piece = { index: index, data: data, begin: begin };
     }
   }
   readBitByBit(

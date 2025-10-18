@@ -36,11 +36,11 @@ export default class Torrent {
       .digest();
     this.clientId = crypto.randomBytes(20);
 
-    console.log(
-      this.decoded.info.length - this.decoded.info["piece length"] < 0
-        ? this.decoded.info.length
-        : this.decoded.info["piece length"]
-    );
+    // console.log(
+    //   this.decoded.info.length - this.decoded.info["piece length"] < 0
+    //     ? this.decoded.info.length
+    //     : this.decoded.info["piece length"]
+    // );
     // Decode piece indexes
     let totalLength: number = this.decoded.info.length;
     let pieceLength: number = this.decoded.info["piece length"] as number;
@@ -60,7 +60,7 @@ export default class Torrent {
         ),
         have: false,
         length: totalLength < 0 ? temp : pieceLength,
-        data: null,
+        data: {},
       });
     }
 

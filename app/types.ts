@@ -41,6 +41,11 @@ export type Piece = {
   index: number;
   hash: Buffer;
   have: boolean;
-  data: Buffer | null;
+  data: PieceStorage;
   length: number;
+};
+export type PieceStorage = {
+  [index: number]: {
+    [begin: number]: Buffer;
+  };
 };
