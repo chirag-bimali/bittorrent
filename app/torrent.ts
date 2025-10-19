@@ -36,32 +36,28 @@ export default class Torrent {
       .digest();
     this.clientId = crypto.randomBytes(20);
 
-    // console.log(
-    //   this.decoded.info.length - this.decoded.info["piece length"] < 0
-    //     ? this.decoded.info.length
-    //     : this.decoded.info["piece length"]
-    // );
     // Decode piece indexes
     let totalLength: number = this.decoded.info.length;
     let pieceLength: number = this.decoded.info["piece length"] as number;
+    const piecesHash: Buffer = Buffer.from(this.decoded.info.pieces, 'binary');
 
-    for (
-      let i = 0;
-      i < this.decoded.info.pieces.length;
-      i += this.PIECE_INDEX_LENGTH
-    ) {
-      const temp = totalLength;
-      totalLength = totalLength - pieceLength;
+    for (let i = 0; i < this.decoded.info.pieces.length / 20; i++) {
+      const begin = i * pieceLength;
       this.pieces.push({
-        index: i / this.PIECE_INDEX_LENGTH,
-        hash: this.decoded.info.pieces.substring(
-          i,
-          i + this.PIECE_INDEX_LENGTH
-        ),
+        index: i,
+        hash: piecesHash.subarray(i * 20, (i + 1) * 20),
         have: false,
-        length: totalLength < 0 ? temp : pieceLength,
+        length:
+          begin + pieceLength <= totalLength
+            ? pieceLength
+            : totalLength - begin,
         data: [],
       });
+      /**
+        e876f67a2a8886e8f36b136726c30fa29703022d
+        6e2275e604a0766656736e81ff10b55204ad8d35
+        f00d937a0213df1982bc8d097227ad9e909acc17
+      */
     }
 
     if (this.decoded.info.files) {
