@@ -25,7 +25,7 @@ export default class Torrent {
   public readonly PIECE_INDEX_LENGTH: number = 20;
   public readonly pieces: Piece[] = [];
   public port: number = 6881;
-  public readonly left = 0;
+  public left: number;
   public peers: Peer[] = [];
 
   constructor(torrentString: string) {
@@ -38,8 +38,9 @@ export default class Torrent {
 
     // Decode piece indexes
     let totalLength: number = this.decoded.info.length;
+    this.left = totalLength;
     let pieceLength: number = this.decoded.info["piece length"] as number;
-    const piecesHash: Buffer = Buffer.from(this.decoded.info.pieces, 'binary');
+    const piecesHash: Buffer = Buffer.from(this.decoded.info.pieces, "binary");
 
     for (let i = 0; i < this.decoded.info.pieces.length / 20; i++) {
       const begin = i * pieceLength;
@@ -53,11 +54,6 @@ export default class Torrent {
             : totalLength - begin,
         data: [],
       });
-      /**
-        e876f67a2a8886e8f36b136726c30fa29703022d
-        6e2275e604a0766656736e81ff10b55204ad8d35
-        f00d937a0213df1982bc8d097227ad9e909acc17
-      */
     }
 
     if (this.decoded.info.files) {
@@ -71,6 +67,15 @@ export default class Torrent {
     return Array.from(buf)
       .map((b) => `%${b.toString(16).padStart(2, "0")}`)
       .join("");
+  }
+  
+  verifyPiece(piece: Piece): boolean {
+    const data = Buffer.concat(
+      piece.data.sort((a, b) => a.begin - b.begin).map((item) => item.data)
+    );
+    if (piece.length !== data.length) return false;
+    const hash: Buffer = crypto.createHash("sha1").update(piece).digest();
+    return hash.equals(piece.hash);
   }
 
   async fetchPeers(): Promise<Peer[]> {

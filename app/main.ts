@@ -210,36 +210,14 @@ async function downloadPiece() {
       const index = connection.pieces.findIndex((piece) => {
         return request.piece?.index === piece.index;
       });
-      if (request.piece?.data) {
-        connection.pieces[index].data.push({
-          begin: request.piece.begin,
-          data: request.piece.data,
-        });
-        let length = 0;
-        for (const item of connection.pieces[index].data) {
-          length += item.data.length;
-        }
-        console.log(length);
-        if (length === connection.pieces[index].length) {
-          // verify piece
-          connection.pieces[index].data = connection.pieces[index].data.sort(
-            (a, b) => a.begin - b.begin
-          );
-          let piece = Buffer.alloc(0);
-          for (const item of connection.pieces[index].data) {
-            piece = Buffer.concat([piece, item.data]);
-          }
-          // Create SHA-1 hash
+      if (!request.piece?.data) return;
 
-          const hash: string = crypto.createHash("sha1").update(piece).digest('hex'); // or "binary", "base64"
-          console.log(hash, connection.pieces[index].hash.toString("hex"))
-          console.log(connection.pieces[index].hash.toString("hex") === hash);
+      connection.pieces[index].data.push({
+        begin: request.piece.begin,
+        data: request.piece.data,
+      });
+      if(torrent.verifyPiece(connection.pieces[index]))
 
-          // console.log(`Pass ${pass}`);
-          // if (pass === 0) console.log(`Piece ${index} arrived successfully.`);
-          // else console.log(`Piece ${index} arrived invalidly`);
-        }
-      }
     });
     connection.onData("choke", (request: Request, response: Response) => {
       console.log(`choked`);
