@@ -1,6 +1,6 @@
-const fs = require("fs");
-const crypto = require("crypto");
-const net = require("net");
+import fs, { existsSync } from "fs";
+import crypto from "crypto";
+import net from "net";
 
 import type {
   BencodeDecoderStatic,
@@ -15,6 +15,7 @@ const BencodeDecoder = BencodeDecoderDefault as BencodeDecoderStatic;
 import BencodeEncoderDefault from "./bencodeEncoder";
 import Torrent from "./torrent";
 import { PeerConnection, Request, Response } from "./peerConnection";
+import path from "path";
 const BencodeEncoder = BencodeEncoderDefault as BencodeEncoderStatic;
 
 function calculateSHA1IntoHex(data: string): string {
@@ -135,6 +136,7 @@ async function downloadPiece() {
       throw new Error("Specify the output directory -o");
     }
     const output = args[4];
+    console.log(output);
     const torrentFileLocation = args[5];
     const peerLocation = args[6];
 
@@ -146,6 +148,18 @@ async function downloadPiece() {
     const clientId = generateId(20);
 
     const torrent: Torrent = new Torrent(torrentString);
+
+    if (!(fs.existsSync(output) && fs.statSync(output).isDirectory())) {
+      const dir = fs.mkdirSync(output, { recursive: true });
+      if (dir !== output) {
+        console.error(`Unable to create directory`);
+        throw new Error("Unable to create directory");
+      }
+      if (!fs.existsSync(path.join(output, torrent.fileName))) {
+        fs.writeFileSync(path.join(output, torrent.fileName), "");
+        fs.truncateSync(path.join(output, torrent.fileName), torrent.size);
+      }
+    }
 
     const availablePeers = await torrent.fetchPeers();
     const matched = availablePeers.find(({ host, port }) => {
@@ -216,8 +230,8 @@ async function downloadPiece() {
         begin: request.piece.begin,
         data: request.piece.data,
       });
-      if(torrent.verifyPiece(connection.pieces[index]))
-
+      if (torrent.verifyPiece(connection.pieces[index]))
+        console.log(`piece index:${index} arrived`);
     });
     connection.onData("choke", (request: Request, response: Response) => {
       console.log(`choked`);

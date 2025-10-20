@@ -27,14 +27,18 @@ export default class Torrent {
   public port: number = 6881;
   public left: number;
   public peers: Peer[] = [];
+  public fileName: string;
+  public size: number;
 
   constructor(torrentString: string) {
     this.decoded = BencodeDecoder.decodeBencode(torrentString) as Dictionary;
+    this.fileName = this.decoded.info.name;
     this.infoHash = crypto
       .createHash("sha1")
       .update(BencodeEncoder.bencodeDictonary(this.decoded.info), "binary")
       .digest();
     this.clientId = crypto.randomBytes(20);
+    this.size = this.decoded.info.length
 
     // Decode piece indexes
     let totalLength: number = this.decoded.info.length;
@@ -68,13 +72,13 @@ export default class Torrent {
       .map((b) => `%${b.toString(16).padStart(2, "0")}`)
       .join("");
   }
-  
+
   verifyPiece(piece: Piece): boolean {
     const data = Buffer.concat(
       piece.data.sort((a, b) => a.begin - b.begin).map((item) => item.data)
     );
     if (piece.length !== data.length) return false;
-    const hash: Buffer = crypto.createHash("sha1").update(piece).digest();
+    const hash: Buffer = crypto.createHash("sha1").update(data).digest();
     return hash.equals(piece.hash);
   }
 

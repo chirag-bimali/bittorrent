@@ -242,6 +242,7 @@ export class PeerConnection {
       });
 
       this.connection.on("error", (err) => {
+        console.log(err)
         throw new Error(err.message);
       });
       this.connection.on("close", () => {
