@@ -1,6 +1,6 @@
 {
-  "name": "@codecrafters/bittorrent",
-  "description": "Build your own BitTorrent challenge, from CodeCrafters",
+  "name": "@chirag-bimali/bittorrent",
+  "description": "Build your own BitTorrent challenge",
   "type": "module",
   "scripts": {
     "dev": "bun run app/main.ts"
