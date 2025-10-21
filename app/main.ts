@@ -40,7 +40,7 @@ function extractPieceHashesInHex(
 }
 
 function generateId(length: number = 20): Buffer<ArrayBuffer> {
-  return crypto.randomBytes(length); // secure random numbers
+  return Buffer.from(crypto.randomBytes(length)); // secure random numbers
 }
 
 const args = process.argv;
@@ -160,6 +160,7 @@ async function downloadPiece() {
         fs.truncateSync(path.join(output, torrent.fileName), torrent.size);
       }
     }
+    const fd = fs.openSync(path.join(output, torrent.fileName), "w+");
 
     const availablePeers = await torrent.fetchPeers();
     const matched = availablePeers.find(({ host, port }) => {
@@ -203,7 +204,7 @@ async function downloadPiece() {
       response.interested();
     });
     connection.onData("unchoke", (request, response) => {
-      const length = Math.pow(2, 13); // 8192
+      const length = Math.pow(2, 14); // 8192
       for (const piece of torrent.pieces) {
         let begin = 0;
         if (!piece.have) {
@@ -230,8 +231,18 @@ async function downloadPiece() {
         begin: request.piece.begin,
         data: request.piece.data,
       });
-      if (torrent.verifyPiece(connection.pieces[index]))
-        console.log(`piece index:${index} arrived`);
+      if (torrent.verifyPiece(connection.pieces[index])) {
+        for (const data of connection.pieces[index].data) {
+          data.data.length;
+          fs.writeSync(
+            fd,
+            data.data,
+            0,
+            data.data.length,
+            index * torrent.pieceLength + data.begin
+          );
+        }
+      }
     });
     connection.onData("choke", (request: Request, response: Response) => {
       console.log(`choked`);

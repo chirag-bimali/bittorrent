@@ -29,6 +29,7 @@ export default class Torrent {
   public peers: Peer[] = [];
   public fileName: string;
   public size: number;
+  public pieceLength: number;
 
   constructor(torrentString: string) {
     this.decoded = BencodeDecoder.decodeBencode(torrentString) as Dictionary;
@@ -45,6 +46,7 @@ export default class Torrent {
     this.left = totalLength;
     let pieceLength: number = this.decoded.info["piece length"] as number;
     const piecesHash: Buffer = Buffer.from(this.decoded.info.pieces, "binary");
+    this.pieceLength = pieceLength;
 
     for (let i = 0; i < this.decoded.info.pieces.length / 20; i++) {
       const begin = i * pieceLength;
