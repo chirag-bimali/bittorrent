@@ -61,8 +61,16 @@ if (args[2] === "info") {
     const torrentData = fs.readFileSync(args[3]);
     const torrentString = torrentData.toString("binary");
     const decoded: any = BencodeDecoder.decodeBencode(torrentString);
+
     console.log(`Tracker URL: ${decoded.announce}`);
-    console.log(`Length: ${decoded.info.length}`);
+    if (decoded.info.length) console.log(`Length: ${decoded.info.length}`);
+    else {
+      let length = 0;
+      for (const item of decoded.info.files) {
+        length += item.length;
+      }
+      console.log(`Length: ${length}`);
+    }
     const encodedInfo = BencodeEncoder.bencodeDictonary(decoded.info);
     const infoHash = calculateSHA1IntoHex(encodedInfo);
     console.log(`Info Hash: ${infoHash}`);
@@ -74,9 +82,9 @@ if (args[2] === "info") {
 
     console.log("Piece Hashes");
 
-    for (const hex of extractPieceHashesInHex(pieces, pieceLength)) {
-      console.log(hex);
-    }
+    // for (const hex of extractPieceHashesInHex(pieces, pieceLength)) {
+    //   console.log(hex);
+    // }
   } catch (error: any) {
     console.error(error.message);
   }
@@ -254,4 +262,5 @@ async function downloadPiece() {
 }
 
 if (args[2] === "download_piece") downloadPiece();
-else console.error(`Try help to know more!\nExiting...`);
+// if (args[3] === "parse") {
+// } else console.error(`Try help to know more!\nExiting...`);
