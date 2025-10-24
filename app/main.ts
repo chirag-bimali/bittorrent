@@ -46,9 +46,12 @@ function generateId(length: number = 20): Buffer<ArrayBuffer> {
 const args = process.argv;
 
 if (args[2] === "decode") {
-  const bencodedValue = args[3];
-  console.error("Logs from your program will appear here!");
   try {
+    let bencodedValue = args[3];
+    if (args[3] === "-f") {
+      bencodedValue = fs.readFileSync(args[4]).toString("binary");
+      const decoded = BencodeDecoder.decodeBencode(bencodedValue);
+    }
     const decoded = BencodeDecoder.decodeBencode(bencodedValue);
     console.log(decoded);
   } catch (error: any) {
