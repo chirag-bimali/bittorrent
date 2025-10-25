@@ -1,6 +1,7 @@
 import fs, { existsSync } from "fs";
 import crypto from "crypto";
 import net from "net";
+import dgram, { Socket } from "dgram";
 
 import type {
   BencodeDecoderStatic,
@@ -265,5 +266,25 @@ async function downloadPiece() {
 }
 
 if (args[2] === "download_piece") downloadPiece();
+
+const MULTICAST_ADDR = "239.192.152.143"; // IPv4 LSD group
+const PORT = 6771;
+
+if (args[2] === "lsd") {
+  const socket = dgram.createSocket({ type: "udp4", reuseAddr: true });
+  socket.on("message", (msg: Buffer, rinfo: dgram.RemoteInfo) => {
+    console.log(rinfo);
+    const text = msg.toString();
+    const infoHash = text.match(/Infohash:\s*(\w+)/i);
+    const port = text.match(/Port:\s*(\d+)/i);
+    if (infoHash && port) {
+      console.log(`${rinfo.address}:${port[1]} is serving ${infoHash[1]}`);
+    }
+  });
+  socket.bind(PORT, () => {
+    socket.addMembership(MULTICAST_ADDR);
+    console.log(`Listening LSD in ${MULTICAST_ADDR}:${PORT}`);
+  });
+}
 // if (args[3] === "parse") {
 // } else console.error(`Try help to know more!\nExiting...`);
