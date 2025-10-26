@@ -49,7 +49,6 @@ export default class Torrent {
     } else {
       this.files.push({ length: this.decoded.info.length, path: [this.name] });
     }
-    console.log(this.files);
     this.infoHash = crypto
       .createHash("sha1")
       .update(BencodeEncoder.bencodeDictonary(this.decoded.info), "binary")
