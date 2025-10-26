@@ -163,17 +163,24 @@ async function downloadTorrent() {
     const torrent: Torrent = new Torrent(torrentString);
 
     if (!(fs.existsSync(output) && fs.statSync(output).isDirectory())) {
-      const dir = fs.mkdirSync(output, { recursive: true });
-      if (dir !== output) {
-        console.error(`Unable to create directory`);
-        throw new Error("Unable to create directory");
-      }
-      if (!fs.existsSync(path.join(output, torrent.name))) {
-        fs.writeFileSync(path.join(output, torrent.name), "");
-        fs.truncateSync(path.join(output, torrent.name), torrent.size);
-      }
+      throw new Error(`'${path.join(output)}' does not exist`);
     }
-    const fd = fs.openSync(path.join(output, torrent.name), "w+");
+
+    const dir = fs.mkdirSync(torrent.name, { recursive: true });
+    if (dir !== output) {
+      console.error(`Unable to create directory`);
+      throw new Error("Unable to create directory");
+    }
+    torrent.files.forEach((file) => {
+      if (!fs.existsSync(path.join(output, torrent.name, ...file.path))) {
+        fs.writeFileSync(path.join(output, torrent.name, ...file.path), "");
+        fs.truncateSync(
+          path.join(output, torrent.name, ...file.path),
+          torrent.size
+        );
+      }
+    });
+
     throw new Error(`Just don't go after this`);
 
     const availablePeers = await torrent.fetchPeers();
