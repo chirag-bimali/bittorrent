@@ -141,22 +141,23 @@ async function handshakeOption() {
 if (args[2] === "handshake") {
   handshakeOption();
 }
+// download_piece -o ./sample-folder chatly.torrent
 
-async function downloadPiece() {
+async function downloadTorrent() {
   try {
     if (args[3] !== "-o") {
       throw new Error("Specify the output directory -o");
     }
+
     const output = args[4];
     console.log(output);
     const torrentFileLocation = args[5];
-    const peerLocation = args[6];
+    // const peerLocation = args[6];
 
-    const pieceIndex = args[7];
     const torrentData = fs.readFileSync(torrentFileLocation);
     const torrentString = torrentData.toString("binary");
 
-    const [peerIp, peerPort] = peerLocation.split(":");
+    // const [peerIp, peerPort] = peerLocation.split(":");
     const clientId = generateId(20);
 
     const torrent: Torrent = new Torrent(torrentString);
@@ -167,18 +168,21 @@ async function downloadPiece() {
         console.error(`Unable to create directory`);
         throw new Error("Unable to create directory");
       }
-      if (!fs.existsSync(path.join(output, torrent.fileName))) {
-        fs.writeFileSync(path.join(output, torrent.fileName), "");
-        fs.truncateSync(path.join(output, torrent.fileName), torrent.size);
+      if (!fs.existsSync(path.join(output, torrent.name))) {
+        fs.writeFileSync(path.join(output, torrent.name), "");
+        fs.truncateSync(path.join(output, torrent.name), torrent.size);
       }
     }
-    const fd = fs.openSync(path.join(output, torrent.fileName), "w+");
+    const fd = fs.openSync(path.join(output, torrent.name), "w+");
+    throw new Error(`Just don't go after this`);
 
     const availablePeers = await torrent.fetchPeers();
     const matched = availablePeers.find(({ host, port }) => {
       return host === peerIp && peerPort === port.toString();
     });
-    if (!matched) throw new Error(`Peers '${peerIp}:${peerPort}' not found`);
+    if (!matched) {
+      throw new Error(`Peers '${peerIp}:${peerPort}' not found`);
+    }
 
     const connection = new PeerConnection(
       matched,
@@ -265,7 +269,7 @@ async function downloadPiece() {
   }
 }
 
-if (args[2] === "download_piece") downloadPiece();
+if (args[2] === "download_torrent") downloadTorrent();
 
 const MULTICAST_ADDR = "239.192.152.143"; // IPv4 LSD group
 const PORT = 6771;

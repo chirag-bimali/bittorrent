@@ -16,7 +16,13 @@ const BencodeDecoder = BencodeDecoderDefault as BencodeDecoderStatic;
 
 import BencodeEncoderDefault from "./bencodeEncoder";
 import { PeerConnection } from "./peerConnection";
+import path from "path";
 const BencodeEncoder = BencodeEncoderDefault as BencodeEncoderStatic;
+
+type File = {
+  length: number;
+  path: string[];
+};
 
 export default class Torrent {
   public readonly decoded: Dictionary;
@@ -27,19 +33,29 @@ export default class Torrent {
   public port: number = 6881;
   public left: number;
   public peers: Peer[] = [];
-  public fileName: string;
+  public name: string;
   public size: number;
   public pieceLength: number;
+  public files: File[] = [];
 
   constructor(torrentString: string) {
     this.decoded = BencodeDecoder.decodeBencode(torrentString) as Dictionary;
-    this.fileName = this.decoded.info.name;
+    this.name = this.decoded.info.name;
+
+    if (this.decoded.info.files) {
+      this.decoded.info.files.forEach((element: File) => {
+        if (element) this.files.push(element);
+      });
+    } else {
+      this.files.push({ length: this.decoded.info.length, path: [this.name] });
+    }
+    console.log(this.files);
     this.infoHash = crypto
       .createHash("sha1")
       .update(BencodeEncoder.bencodeDictonary(this.decoded.info), "binary")
       .digest();
     this.clientId = crypto.randomBytes(20);
-    this.size = this.decoded.info.length
+    this.size = this.decoded.info.length;
 
     // Decode piece indexes
     let totalLength: number = this.decoded.info.length;
