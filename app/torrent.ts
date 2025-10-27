@@ -26,6 +26,8 @@ type File = {
 
 export default class Torrent {
   public readonly decoded: Dictionary;
+  public announce: string | null;
+  public announceList: string | null;
   public readonly infoHash: Buffer<ArrayBuffer>;
   public readonly clientId: Buffer<ArrayBuffer>;
   public readonly PIECE_INDEX_LENGTH: number = 20;
@@ -41,6 +43,10 @@ export default class Torrent {
   constructor(torrentString: string) {
     this.decoded = BencodeDecoder.decodeBencode(torrentString) as Dictionary;
     this.name = this.decoded.info.name;
+    this.announce = this.decoded.announce ? this.decoded.announce : null;
+    this.announceList = this.decoded.announceList
+      ? this.decoded.announceList
+      : null;
 
     if (this.decoded.info.files) {
       this.decoded.info.files.forEach((element: File) => {
@@ -99,7 +105,42 @@ export default class Torrent {
     return hash.equals(piece.hash);
   }
 
-  async fetchPeers(): Promise<Peer[]> {
+  createFilePlaceholders(downloadLocation: string) {
+    if (
+      !(
+        fs.existsSync(downloadLocation) &&
+        fs.statSync(downloadLocation).isDirectory()
+      )
+    ) {
+      throw new Error(`'${path.join(downloadLocation)}' does not exist`);
+    }
+
+    const dir = fs.mkdirSync(path.join(downloadLocation, this.name), {
+      recursive: true,
+    });
+    this.files.forEach((file) => {
+      if (
+        !fs.existsSync(path.join(downloadLocation, this.name, ...file.path))
+      ) {
+        fs.mkdirSync(
+          path.dirname(path.join(downloadLocation, this.name, ...file.path)),
+          {
+            recursive: true,
+          }
+        );
+        fs.writeFileSync(
+          path.join(downloadLocation, this.name, ...file.path),
+          ""
+        );
+        fs.truncateSync(
+          path.join(downloadLocation, this.name, ...file.path),
+          file.length
+        );
+      }
+    });
+  }
+
+  async callTracker(trackerUrl: string): Promise<Peer[] | null> {
     const infoHashEncoded = this.percentEncodeBuffer(this.infoHash);
     const clientIdEncoded = this.percentEncodeBuffer(this.clientId);
     let compact = 0;
@@ -107,7 +148,7 @@ export default class Torrent {
     const params = {
       port: `${this.port}`,
       uploaded: `${0}`,
-      downloaded: `${0}`,
+      downloaded: `${this.size - this.left}`,
       left: `${this.left}`,
       compact: `${compact}`,
     };

@@ -101,13 +101,17 @@ if (args[2] === "peers") {
       const torrentString = torrentData.toString("binary");
 
       const torrent: Torrent = new Torrent(torrentString);
-      const peers = await torrent.fetchPeers();
+      if (torrent.announce) {
+        const peers = await torrent.callTracker(torrent.announce);
 
-      console.log(`List of available peers:\n`);
-      let i = 1;
-      for (const peer of peers) {
-        console.log(peer);
-        i++;
+        if (!peers) return;
+        console.log(`List of available peers:\n`);
+        let i = 1;
+
+        for (const peer of peers) {
+          console.log(peer);
+          i++;
+        }
       }
     })();
   } catch (error: any) {
@@ -122,7 +126,6 @@ async function handshakeOption() {
     const torrentString = torrentData.toString("binary");
 
     const torrent: Torrent = new Torrent(torrentString);
-    await torrent.fetchPeers();
 
     if (args[4] === undefined) throw new Error(`Specify peer host:port`);
     const hostAndPort = args[4].split(":");
@@ -163,30 +166,17 @@ async function downloadTorrent() {
     const torrent: Torrent = new Torrent(torrentString);
 
     console.log(`Creating files...`);
-    if (!(fs.existsSync(output) && fs.statSync(output).isDirectory())) {
-      throw new Error(`'${path.join(output)}' does not exist`);
-    }
+    torrent.createFilePlaceholders(output);
 
-    const dir = fs.mkdirSync(path.join(output, torrent.name), {
-      recursive: true,
-    });
-    torrent.files.forEach((file) => {
-      if (!fs.existsSync(path.join(output, torrent.name, ...file.path))) {
-        fs.mkdirSync(
-          path.dirname(path.join(output, torrent.name, ...file.path)),
-          { recursive: true }
-        );
-        fs.writeFileSync(path.join(output, torrent.name, ...file.path), "");
-        fs.truncateSync(
-          path.join(output, torrent.name, ...file.path),
-          file.length
-        );
-      }
-    });
+    if (torrent.announce) {
+      torrent.callTracker(torrent.announce);
+    } else {
+      // LSD
+    }
 
     throw new Error(`Just don't go after this`);
 
-    const availablePeers = await torrent.fetchPeers();
+    const availablePeers = await torrent.callTracker();
     const matched = availablePeers.find(({ host, port }) => {
       return host === peerIp && peerPort === port.toString();
     });
