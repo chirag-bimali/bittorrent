@@ -2,28 +2,29 @@ import fs from "fs";
 import type {} from "./types";
 import Torrent from "./Torrent";
 
-const OPTION_DOWNLOAD_PATH = "-download=";
-const OPTION_TORRENT_PATH = "-torrent=";
+const OPTION_DOWNLOAD_PATH = "-download";
+const OPTION_TORRENT_PATH = "-torrent";
 
 function argumentParser(args: string[]): {
   download: string;
   torrent: string;
 } {
-  const downloadPathArgs = args.find((arg) => {
-    return arg.startsWith(OPTION_DOWNLOAD_PATH);
+  const downloadOptionIndex = args.findIndex((arg) => {
+    return arg === OPTION_DOWNLOAD_PATH;
   });
-  if (!downloadPathArgs) {
+
+  if (downloadOptionIndex < 0 && !args[downloadOptionIndex + 1]) {
     throw new Error("Download path not specified");
   }
 
-  const torrentPathArgs = args.find((arg) => {
-    return arg.startsWith(OPTION_TORRENT_PATH);
+  const torrentPathOptionIndex = args.findIndex((arg) => {
+    return arg === OPTION_TORRENT_PATH;
   });
-  if (!torrentPathArgs) {
+  if (torrentPathOptionIndex < 0 && !args[torrentPathOptionIndex + 1]) {
     throw new Error("Torrent file path not specified");
   }
-  const downloadPath = downloadPathArgs.substring(OPTION_DOWNLOAD_PATH.length);
-  const torrentFilePath = torrentPathArgs.substring(OPTION_TORRENT_PATH.length);
+  const downloadPath = args[downloadOptionIndex + 1];
+  const torrentFilePath = args[torrentPathOptionIndex + 1];
   return {
     download: downloadPath,
     torrent: torrentFilePath,
@@ -33,4 +34,6 @@ export default function download(args: string[]) {
   const argObj = argumentParser(args);
   const torrentString = fs.readFileSync(argObj.torrent, "binary");
   const torrent = new Torrent(torrentString);
+  torrent.lsdEnable();
+  
 }

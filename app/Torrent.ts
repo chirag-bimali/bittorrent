@@ -17,6 +17,7 @@ const BencodeDecoder = BencodeDecoderDefault as BencodeDecoderStatic;
 import BencodeEncoderDefault from "./bencodeEncoder";
 import { PeerConnection } from "./PeerConnection";
 import path from "path";
+import LSD from "./LSD";
 const BencodeEncoder = BencodeEncoderDefault as BencodeEncoderStatic;
 
 type File = {
@@ -199,6 +200,15 @@ export default class Torrent {
         id: Buffer.from(value["peer id"], "binary"),
       };
       return peer;
+    });
+  }
+  public lsd: LSD | null = null;
+  lsdEnable() {
+    this.lsd = new LSD();
+    this.lsd.onMessage((infoHash, addr, port) => {
+      if (this.infoHash.toString("hex").toUpperCase() === infoHash) {
+        this.peers.push({ host: addr, port: port });
+      } else console.log(`Some one is hosting ${infoHash} at ${addr}:${port}`);
     });
   }
 }

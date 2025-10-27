@@ -184,7 +184,6 @@ async function main() {
   } catch (err) {
     console.error(err);
   }
-  throw new Error("Yoyo");
 
   try {
     if (args[3] !== "-o") {
@@ -281,14 +280,13 @@ async function main() {
         });
         if (torrent.verifyPiece(connection.pieces[index])) {
           for (const data of connection.pieces[index].data) {
-            // fs.openSync()
-            fs.writeSync(
-              fd,
-              data.data,
-              0,
-              data.data.length,
-              index * torrent.pieceLength + data.begin
-            );
+            // fs.writeSync(
+            //   fd,
+            //   data.data,
+            //   0,
+            //   data.data.length,
+            //   index * torrent.pieceLength + data.begin
+            // );
           }
         }
       });
@@ -314,7 +312,6 @@ const PORT = 6771;
 if (args[2] === "lsd") {
   const socket = dgram.createSocket({ type: "udp4", reuseAddr: true });
   socket.on("message", (msg: Buffer, rinfo: dgram.RemoteInfo) => {
-    console.log(rinfo);
     const text = msg.toString();
     const infoHash = text.match(/Infohash:\s*(\w+)/i);
     const port = text.match(/Port:\s*(\d+)/i);
