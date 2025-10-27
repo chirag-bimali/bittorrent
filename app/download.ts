@@ -1,6 +1,6 @@
 import fs from "fs";
 import type {} from "./types";
-import Torrent from "./torrent";
+import Torrent from "./Torrent";
 
 const OPTION_DOWNLOAD_PATH = "-download=";
 const OPTION_TORRENT_PATH = "-torrent=";

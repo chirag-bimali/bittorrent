@@ -14,8 +14,8 @@ import BencodeDecoderDefault from "./bencodeDecoder";
 const BencodeDecoder = BencodeDecoderDefault as BencodeDecoderStatic;
 
 import BencodeEncoderDefault from "./bencodeEncoder";
-import Torrent from "./torrent";
-import { PeerConnection, Request, Response } from "./peerConnection";
+import Torrent from "./Torrent";
+import { PeerConnection, Request, Response } from "./PeerConnection";
 import path from "path";
 import download from "./download";
 const BencodeEncoder = BencodeEncoderDefault as BencodeEncoderStatic;

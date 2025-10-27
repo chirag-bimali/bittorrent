@@ -15,7 +15,7 @@ import BencodeDecoderDefault from "./bencodeDecoder";
 const BencodeDecoder = BencodeDecoderDefault as BencodeDecoderStatic;
 
 import BencodeEncoderDefault from "./bencodeEncoder";
-import { PeerConnection } from "./peerConnection";
+import { PeerConnection } from "./PeerConnection";
 import path from "path";
 const BencodeEncoder = BencodeEncoderDefault as BencodeEncoderStatic;
 
