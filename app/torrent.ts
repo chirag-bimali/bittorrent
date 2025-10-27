@@ -136,6 +136,14 @@ export default class Torrent {
           path.join(downloadLocation, this.name, ...file.path),
           file.length
         );
+        console.log(
+          `Creating ${path.join(
+            __dirname,
+            downloadLocation,
+            this.name,
+            ...file.path
+          )}`
+        );
       }
     });
   }

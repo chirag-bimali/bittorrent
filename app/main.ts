@@ -17,6 +17,7 @@ import BencodeEncoderDefault from "./bencodeEncoder";
 import Torrent from "./torrent";
 import { PeerConnection, Request, Response } from "./peerConnection";
 import path from "path";
+import download from "./download";
 const BencodeEncoder = BencodeEncoderDefault as BencodeEncoderStatic;
 
 function calculateSHA1IntoHex(data: string): string {
@@ -146,14 +147,51 @@ if (args[2] === "handshake") {
 }
 // download_piece -o ./sample-folder chatly.torrent
 
-async function downloadTorrent() {
+// options
+// - peers: Displays available peers for the client
+// - info: Displays the info for torrent file
+// - download: Downloads the files from given torrent file
+
+async function main() {
+  // Parse file
+  // Initialize Class
+  // Create File Placeholders
+  // Search Peers
+  // Download Files
+  try {
+    // if (args[3] !== "-o") {
+    //   throw new Error("Specify the output directory -o");
+    // }
+    // if (!args[4]) {
+    //   throw new Error("Download path not specified")
+    // }
+    // if (!args[5]) {
+    //   throw new Error("Torrent file location not specified")
+    // }
+    const option = args[2];
+    switch (option) {
+      case "peers":
+        break;
+      case "info":
+        break;
+      case "download":
+        download(args.slice(3));
+        break;
+      default:
+        throw new Error(`No option available`);
+        break;
+    }
+  } catch (err) {
+    console.error(err);
+  }
+  throw new Error("Yoyo");
+
   try {
     if (args[3] !== "-o") {
       throw new Error("Specify the output directory -o");
     }
 
-    const output = args[4];
-    console.log(output);
+    const downloadPath = args[4];
     const torrentFileLocation = args[5];
     // const peerLocation = args[6];
 
@@ -164,112 +202,111 @@ async function downloadTorrent() {
     const clientId = generateId(20);
 
     const torrent: Torrent = new Torrent(torrentString);
-
-    console.log(`Creating files...`);
-    torrent.createFilePlaceholders(output);
+    torrent.createFilePlaceholders(downloadPath);
 
     if (torrent.announce) {
-      torrent.callTracker(torrent.announce);
+      const peers = await torrent.callTracker(torrent.announce);
+      if (peers === null) throw new Error(`Unable to find peers`);
+      peers.forEach((value, index) => {
+        console.log(`${index}: ${value.host}:${value.port}`);
+      });
+
+      const matched = peers[0];
+
+      const connection = new PeerConnection(
+        matched,
+        torrent.infoHash,
+        torrent.pieces
+      );
+      connection.connect((response: Response) => {
+        response.handshake(torrent.infoHash, clientId);
+      });
+      connection.listen(() => console.log(`Listening...`));
+
+      connection.onData(
+        "keep-alive",
+        (request: Request, response: Response) => {
+          console.log(`Keeping alive...`);
+          response.keepAlive();
+        }
+      );
+      connection.onData("handshake", (request: Request, response: Response) => {
+        console.log(`Handshooked succesfully`);
+      });
+      connection.onData("bitfield", (request: Request, response: Response) => {
+        console.log("Bitfield");
+        const payload = request.rawBuffer.subarray(
+          3 + 2,
+          3 + 2 + request.rawBuffer.readInt32BE(0)
+        );
+
+        request.readBitByBit(payload, (bit, byteIndex, bitIndex) => {
+          const have = bit === 1;
+          const index = byteIndex * 8 + bitIndex;
+
+          if (index < connection.pieces.length) {
+            connection.pieces[index].have = have;
+          }
+        });
+        response.bitfield(torrent.pieces);
+        response.interested();
+      });
+      connection.onData("unchoke", (request, response) => {
+        const length = Math.pow(2, 14); // 8192
+        for (const piece of torrent.pieces) {
+          let begin = 0;
+          if (!piece.have) {
+            while (begin < piece.length) {
+              response.request(
+                piece,
+                begin,
+                begin + length > piece.length ? piece.length - begin : length
+              );
+              begin += length;
+            }
+          }
+        }
+
+        console.log(`Unchoked`);
+      });
+      connection.onData("piece", (request: Request, response: Response) => {
+        const index = connection.pieces.findIndex((piece) => {
+          return request.piece?.index === piece.index;
+        });
+        if (!request.piece?.data) return;
+
+        connection.pieces[index].data.push({
+          begin: request.piece.begin,
+          data: request.piece.data,
+        });
+        if (torrent.verifyPiece(connection.pieces[index])) {
+          for (const data of connection.pieces[index].data) {
+            // fs.openSync()
+            fs.writeSync(
+              fd,
+              data.data,
+              0,
+              data.data.length,
+              index * torrent.pieceLength + data.begin
+            );
+          }
+        }
+      });
+      connection.onData("choke", (request: Request, response: Response) => {
+        console.log(`choked`);
+      });
     } else {
       // LSD
     }
 
     throw new Error(`Just don't go after this`);
-
-    const availablePeers = await torrent.callTracker();
-    const matched = availablePeers.find(({ host, port }) => {
-      return host === peerIp && peerPort === port.toString();
-    });
-    if (!matched) {
-      throw new Error(`Peers '${peerIp}:${peerPort}' not found`);
-    }
-
-    const connection = new PeerConnection(
-      matched,
-      torrent.infoHash,
-      torrent.pieces
-    );
-    connection.connect((response: Response) => {
-      response.handshake(torrent.infoHash, clientId);
-    });
-    connection.listen(() => console.log(`Listening...`));
-
-    connection.onData("keep-alive", (request: Request, response: Response) => {
-      console.log(`Keeping alive...`);
-      response.keepAlive();
-    });
-    connection.onData("handshake", (request: Request, response: Response) => {
-      console.log(`Handshooked succesfully`);
-    });
-    connection.onData("bitfield", (request: Request, response: Response) => {
-      console.log("Bitfield");
-      const payload = request.rawBuffer.subarray(
-        3 + 2,
-        3 + 2 + request.rawBuffer.readInt32BE(0)
-      );
-
-      request.readBitByBit(payload, (bit, byteIndex, bitIndex) => {
-        const have = bit === 1;
-        const index = byteIndex * 8 + bitIndex;
-
-        if (index < connection.pieces.length) {
-          connection.pieces[index].have = have;
-        }
-      });
-      response.bitfield(torrent.pieces);
-      response.interested();
-    });
-    connection.onData("unchoke", (request, response) => {
-      const length = Math.pow(2, 14); // 8192
-      for (const piece of torrent.pieces) {
-        let begin = 0;
-        if (!piece.have) {
-          while (begin < piece.length) {
-            response.request(
-              piece,
-              begin,
-              begin + length > piece.length ? piece.length - begin : length
-            );
-            begin += length;
-          }
-        }
-      }
-
-      console.log(`Unchoked`);
-    });
-    connection.onData("piece", (request: Request, response: Response) => {
-      const index = connection.pieces.findIndex((piece) => {
-        return request.piece?.index === piece.index;
-      });
-      if (!request.piece?.data) return;
-
-      connection.pieces[index].data.push({
-        begin: request.piece.begin,
-        data: request.piece.data,
-      });
-      if (torrent.verifyPiece(connection.pieces[index])) {
-        for (const data of connection.pieces[index].data) {
-          data.data.length;
-          fs.writeSync(
-            fd,
-            data.data,
-            0,
-            data.data.length,
-            index * torrent.pieceLength + data.begin
-          );
-        }
-      }
-    });
-    connection.onData("choke", (request: Request, response: Response) => {
-      console.log(`choked`);
-    });
   } catch (error: any) {
     console.error(error.message);
     console.error(`Exiting...`);
   }
 }
 
-if (args[2] === "download_torrent") downloadTorrent();
+main();
 
 const MULTICAST_ADDR = "239.192.152.143"; // IPv4 LSD group
 const PORT = 6771;
