@@ -1,3 +1,5 @@
+import { exit } from "process";
+
 interface NodeInfo {
   id: Buffer;
   ip: string;
@@ -11,7 +13,7 @@ export class Bucket {
   constructor(min: bigint, max: bigint, size: number = 8) {
     if (max <= min) throw new Error(`max: ${max} <= min : ${min}`);
     this.max = max;
-    this.min = max;
+    this.min = min;
     if (size <= 0) throw new Error(`size must be <= 1, size: ${size}`);
     this.size = size;
   }
@@ -25,27 +27,34 @@ export class Bucket {
   static findSpaceIndex(buckets: Bucket[], node: NodeInfo): number {
     return buckets.findIndex((bucket) => bucket.fits(node.id));
   }
+
   split(min: bigint, max: bigint, clientId: Buffer): [Bucket, Bucket] {
-    if (!this.hasSpace()) throw new Error(`bucket is not full`);
-    if (!this.fits(clientId))
-      throw new Error(`bucket not within node id range`);
+    if (this.hasSpace()) throw new Error(`bucket is not full`);
 
     const mid = (this.min + this.max) >> 1n;
-    const bucketA = new Bucket(this.min, mid);
-    const bucketB = new Bucket(mid + 1n, this.max);
+    const newBuckets = [
+      new Bucket(this.min, mid),
+      new Bucket(mid + 1n, this.max),
+    ];
 
     this.nodes.forEach((node) => {
-      if (bucketA.fits(node.id)) bucketA.insert(node);
-      else bucketB.insert(node);
+      const index = Bucket.findSpaceIndex(newBuckets, node);
+      newBuckets[index].insert(node);
     });
 
-    return [bucketA, bucketB];
+    return [newBuckets[0], newBuckets[1]];
+  }
+  find(callBackfn: (node: NodeInfo) => boolean) {
+    return this.nodes.find(callBackfn);
   }
   static bufferToBigint(buffer: Buffer): bigint {
     return BigInt("0x" + buffer.toString("hex"));
   }
   insert(node: NodeInfo) {
     if (!this.hasSpace()) throw new Error(`bucket has no space`);
+
+    const id = Bucket.bufferToBigint(node.id);
+
     if (this.fits(node.id)) {
       this.nodes.push(node);
     } else throw new Error(`invalid range for node id`);
@@ -64,19 +73,30 @@ export class RoutingTable {
   }
   insert(node: NodeInfo) {
     let index = Bucket.findSpaceIndex(this.buckets, node);
+    if (
+      this.buckets[index].find((n): boolean => {
+        return n.id.equals(node.id);
+      })
+    ) {
+      throw new Error("no duplicates allowed");
+    }
     if (index < 0)
       throw new Error(
         `could not find space for the node ${node.id.toString("hex")}`
       );
-    if (!this.buckets[index].hasSpace()) {
+    while (!this.buckets[index].hasSpace()) {
       const newBuckets = this.buckets[index].split(
         this.buckets[index].min,
         this.buckets[index].max,
         this.clientId
       );
-      this.buckets.slice(index, 1);
+      // splice mutates
+      this.buckets.splice(index, 1);
       this.buckets.push(...newBuckets);
       index = Bucket.findSpaceIndex(this.buckets, node);
+      if (this.buckets[index].hasSpace()) {
+        break;
+      } else continue;
     }
     if (index < 0)
       throw new Error(
@@ -87,12 +107,9 @@ export class RoutingTable {
 }
 export default class DHT {
   public routingTable: RoutingTable;
-  public maxIdSpace: bigint = 2n ^ 159n;
+  public maxIdSpace: bigint;
   constructor(maxIdSpace: bigint, clientId: Buffer) {
-    this.routingTable = new RoutingTable(
-      0n,
-      maxIdSpace,
-      clientId
-    );
+    this.routingTable = new RoutingTable(0n, maxIdSpace, clientId);
+    this.maxIdSpace = maxIdSpace;
   }
 }
