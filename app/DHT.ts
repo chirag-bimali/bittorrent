@@ -6,10 +6,10 @@ interface NodeInfo {
   port: number;
 }
 // bucket operation
-// insert node
-// update node
-// delete node
-// read node
+// insert node ✓
+// read node ✓
+// update node 
+// delete node 
 // check bucket compatibility
 // has space operation
 
@@ -36,7 +36,7 @@ export class Bucket {
     return buckets.findIndex((bucket) => bucket.fits(node.id));
   }
 
-  split(min: bigint, max: bigint, clientId: Buffer): [Bucket, Bucket] {
+  split(): [Bucket, Bucket] {
     if (this.hasSpace()) throw new Error(`bucket is not full`);
 
     const mid = (this.min + this.max) >> 1n;
@@ -53,7 +53,8 @@ export class Bucket {
     return [newBuckets[0], newBuckets[1]];
   }
   find(callBackfn: (node: NodeInfo) => boolean): NodeInfo | null {
-    return this.nodes.find(callBackfn)
+    const node = this.nodes.find(callBackfn)
+    return node ? node : null;
   }
   static bufferToBigint(buffer: Buffer): bigint {
     return BigInt("0x" + buffer.toString("hex"));
@@ -93,11 +94,7 @@ export class RoutingTable {
         `could not find space for the node ${node.id.toString("hex")}`
       );
     while (!this.buckets[index].hasSpace()) {
-      const newBuckets = this.buckets[index].split(
-        this.buckets[index].min,
-        this.buckets[index].max,
-        this.clientId
-      );
+      const newBuckets = this.buckets[index].split();
       // splice mutates
       this.buckets.splice(index, 1);
       this.buckets.push(...newBuckets);
@@ -113,7 +110,6 @@ export class RoutingTable {
     this.buckets[index].insert(node);
   }
   find(callbackFn:(node: NodeInfo) => boolean): NodeInfo | null {
-    
     for(const bucket of this.buckets) {
       const node = bucket.find(callbackFn)
       if(node) return node
