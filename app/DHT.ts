@@ -52,8 +52,8 @@ export class Bucket {
 
     return [newBuckets[0], newBuckets[1]];
   }
-  find(callBackfn: (node: NodeInfo) => NodeInfo | null) {
-    return this.nodes.find(callBackfn);
+  find(callBackfn: (node: NodeInfo) => boolean): NodeInfo | null {
+    return this.nodes.find(callBackfn)
   }
   static bufferToBigint(buffer: Buffer): bigint {
     return BigInt("0x" + buffer.toString("hex"));
@@ -82,9 +82,9 @@ export class RoutingTable {
   insert(node: NodeInfo) {
     let index = Bucket.findSpaceIndex(this.buckets, node);
     if (
-      this.buckets[index].find((n): NodeInfo | null => {
-        return n.id.equals(node.id) ? n : null;
-      }) === null
+      this.buckets[index].find((n): boolean => {
+        return n.id.equals(node.id);
+      })
     ) {
       throw new Error("no duplicates allowed");
     }
@@ -112,7 +112,14 @@ export class RoutingTable {
       );
     this.buckets[index].insert(node);
   }
-  
+  find(callbackFn:(node: NodeInfo) => boolean): NodeInfo | null {
+    
+    for(const bucket of this.buckets) {
+      const node = bucket.find(callbackFn)
+      if(node) return node
+    }
+    return null;
+  }
 }
 export default class DHT {
   public routingTable: RoutingTable;
