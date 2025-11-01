@@ -5,6 +5,14 @@ interface NodeInfo {
   ip: string;
   port: number;
 }
+// bucket operation
+// insert node
+// update node
+// delete node
+// read node
+// check bucket compatibility
+// has space operation
+
 export class Bucket {
   public nodes: NodeInfo[] = [];
   public max: bigint;
@@ -44,7 +52,7 @@ export class Bucket {
 
     return [newBuckets[0], newBuckets[1]];
   }
-  find(callBackfn: (node: NodeInfo) => boolean) {
+  find(callBackfn: (node: NodeInfo) => NodeInfo | null) {
     return this.nodes.find(callBackfn);
   }
   static bufferToBigint(buffer: Buffer): bigint {
@@ -74,9 +82,9 @@ export class RoutingTable {
   insert(node: NodeInfo) {
     let index = Bucket.findSpaceIndex(this.buckets, node);
     if (
-      this.buckets[index].find((n): boolean => {
-        return n.id.equals(node.id);
-      })
+      this.buckets[index].find((n): NodeInfo | null => {
+        return n.id.equals(node.id) ? n : null;
+      }) === null
     ) {
       throw new Error("no duplicates allowed");
     }
@@ -104,6 +112,7 @@ export class RoutingTable {
       );
     this.buckets[index].insert(node);
   }
+  
 }
 export default class DHT {
   public routingTable: RoutingTable;
