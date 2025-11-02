@@ -56,6 +56,11 @@ export class Bucket {
     const node = this.nodes.find(callBackfn)
     return node ? node : null;
   }
+  delete(callBackfn: (node: NodeInfo) => boolean): NodeInfo[] | null {
+    const index = this.nodes.findIndex(callBackfn);
+    if(index < 0) return null;
+    return this.nodes.splice(index, 1);
+  }
   static bufferToBigint(buffer: Buffer): bigint {
     return BigInt("0x" + buffer.toString("hex"));
   }
@@ -113,6 +118,13 @@ export class RoutingTable {
     for(const bucket of this.buckets) {
       const node = bucket.find(callbackFn)
       if(node) return node
+    }
+    return null;
+  }
+  delete(callBackfn: (node: NodeInfo) => boolean): NodeInfo[] | null {
+    for(const bucket of this.buckets) {
+      const node = bucket.delete(callBackfn)
+      if(node !== null) return node;
     }
     return null;
   }
