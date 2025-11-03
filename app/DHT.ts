@@ -1,6 +1,6 @@
 import { exit } from "process";
 
-interface NodeInfo {
+export interface NodeInfo {
   id: Buffer;
   ip: string;
   port: number;
@@ -9,7 +9,7 @@ interface NodeInfo {
 // insert node ✓
 // read node ✓
 // update node 
-// delete node 
+// delete node ✓ 
 // check bucket compatibility
 // has space operation
 
@@ -132,6 +132,7 @@ export class RoutingTable {
 export default class DHT {
   public routingTable: RoutingTable;
   public maxIdSpace: bigint;
+  public infoHashNode: Map<Buffer, NodeInfo[]> = new Map<Buffer, NodeInfo[]>
   constructor(maxIdSpace: bigint, clientId: Buffer) {
     this.routingTable = new RoutingTable(0n, maxIdSpace, clientId);
     this.maxIdSpace = maxIdSpace;
