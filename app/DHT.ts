@@ -1,4 +1,8 @@
 import { exit } from "process";
+import dgram from "dgram";
+import BencodeEncoder from "./bencodeEncoder";
+import BencodeDecoder from "./bencodeDecoder";
+import crypto from "crypto"
 
 export interface NodeInfo {
   id: Buffer;
@@ -133,8 +137,79 @@ export default class DHT {
   public routingTable: RoutingTable;
   public maxIdSpace: bigint;
   public infoHashNode: Map<Buffer, NodeInfo[]> = new Map<Buffer, NodeInfo[]>
+  public PORT: number = 6881;
+  public HOST: string = '0.0.0.0';
+  public BOOTSTRAP_NODE = 'router.bittorrent.com';
+  public BOOTSTRAP_NODE_PORT = 6881;
+  public ID: Buffer;
+  private client =  dgram.createSocket("udp4");
+  private server =  dgram.createSocket("udp4");
+  
+
   constructor(maxIdSpace: bigint, clientId: Buffer) {
     this.routingTable = new RoutingTable(0n, maxIdSpace, clientId);
     this.maxIdSpace = maxIdSpace;
+    this.ID = clientId;
   }
+  // ping, find_node, get_peers, and announce_peer.
+  /*
+  * "t": "transaction-id"
+  * "y": "q" | "r" | "e"
+  * "y": "q" | "r" | "e"
+  * "v": "versioning stuff" // not necessary
+  */
+  /*
+  * Initialize DHT by calling to Bootstrap node
+  * Join the network first
+  */
+  initialie() {
+    this.server.on("message", (msg: Buffer, rinfo) => {
+      console.log("Data received");
+      console.log(msg)
+      console.log(rinfo)
+    })
+    this.server.on("listening", () => {
+      console.log(`Listening on ${this.HOST}:${this.PORT}`)
+      this.ping();
+    })
+    this.server.bind(this.PORT, this.HOST);
+  }
+
+  /*
+  * Ping the node
+  */
+  ping() {
+    const tId = crypto.createHash("sha1").update(Math.random().toString(), "binary").digest().subarray(0, 2); 
+    console.log(`Length of transaction id: ${tId.length}`)
+    const msg = {
+      "t" : tId,  
+      "y" : "q",  
+      "q" : "ping",  
+      "a" : { "id" : this.ID}
+    }
+    const encoded = BencodeEncoder.bencodeDictonary(msg);
+  
+    
+    this.client.send(encoded, 0, encoded.length, this.BOOTSTRAP_NODE_PORT, this.BOOTSTRAP_NODE, (err) => {
+      console.log(`Datagram sent`);
+      console.log(`Error:`);
+      console.log(err);
+    })
+
+  }
+
+  /*
+  * Find query to the node
+  */
+  findNnode() {}
+
+  /*
+  * Get peers query to the node
+  */
+  getPeers() {}
+
+  /*
+  * Announce peers query to the node
+  */
+  announcePeer() {}
 }
