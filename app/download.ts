@@ -1,6 +1,8 @@
 import fs from "fs";
+
 import type {} from "./types";
 import Torrent from "./Torrent";
+import DHT from "./DHT";
 
 const OPTION_DOWNLOAD_PATH = "-download";
 const OPTION_TORRENT_PATH = "-torrent";
@@ -34,6 +36,9 @@ export default function download(args: string[]) {
   const argObj = argumentParser(args);
   const torrentString = fs.readFileSync(argObj.torrent, "binary");
   const torrent = new Torrent(torrentString);
-  torrent.lsdEnable();
-  
+  // torrent.lsdEnable();
+  const maxIdSpace: bigint = BigInt(Math.pow(2, 160));
+  const dht = new DHT(maxIdSpace, torrent.clientId);
+  dht.setBootstrap("router.bittorrent.com", 6881);
+  dht.initialie();
 }

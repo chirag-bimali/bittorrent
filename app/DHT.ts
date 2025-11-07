@@ -139,8 +139,7 @@ export default class DHT {
   public infoHashNode: Map<Buffer, NodeInfo[]> = new Map<Buffer, NodeInfo[]>();
   public PORT: number = 6881;
   public HOST: string = "0.0.0.0";
-  public BOOTSTRAP_NODE = "router.bittorrent.com";
-  public BOOTSTRAP_NODE_PORT = 6881;
+  private bootstrapNode: { ip: string; port: number }[] = [];
   public ID: Buffer;
   private client = dgram.createSocket("udp4");
 
@@ -168,18 +167,23 @@ export default class DHT {
     });
     this.client.on("listening", () => {
       console.log(`Listening on ${this.HOST}:${this.PORT}`);
-      this.ping();
+      this.bootstrapNode.forEach((value) => {
+        this.ping(value.ip, value.port);
+      });
     });
     this.client.on("error", (err) => {
-      console.error("DHT socket error:", err)
-    })
+      console.error("DHT socket error:", err);
+    });
     this.client.bind(this.PORT, this.HOST);
+  }
+  setBootstrap(ip: string, port: number) {
+    this.bootstrapNode.push({ ip, port });
   }
 
   /*
    * Ping the node
    */
-  ping() {
+  ping(ip: string, port: number) {
     const tId = crypto
       .createHash("sha1")
       .update(Math.random().toString(), "utf-8")
@@ -196,16 +200,12 @@ export default class DHT {
     };
     const encoded = BencodeEncoder.bencodeDictonary(msg);
     const encodedBuf = Buffer.from(String(encoded), "binary");
-    this.client.send(
-      encodedBuf,
-      this.BOOTSTRAP_NODE_PORT,
-      this.BOOTSTRAP_NODE,
-      (err) => {
-        console.log(`Datagram sent`);
-        console.log(`Error:`);
-        console.log(err);
-      }
-    );
+
+    this.client.send(encodedBuf, port, ip, (err) => {
+      console.log(`Datagram sent`);
+      console.log(`Error:`);
+      console.log(err);
+    });
   }
 
   /*
