@@ -40,5 +40,9 @@ export default function download(args: string[]) {
   const maxIdSpace: bigint = BigInt(Math.pow(2, 160));
   const dht = new DHT(maxIdSpace, torrent.clientId);
   dht.setBootstrap("router.bittorrent.com", 6881);
+  dht.setBootstrap("router.utorrent.com", 6881);
+  dht.setBootstrap("dht.transmissionbt.com", 6881);
+  dht.setBootstrap("router.bitcomet.com", 6881);
+  dht.setBootstrap("dht.aelitis.com", 6881);
   dht.initialie();
 }

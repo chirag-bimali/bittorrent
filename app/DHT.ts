@@ -3,6 +3,7 @@ import dgram from "dgram";
 import BencodeEncoder from "./bencodeEncoder";
 import BencodeDecoder from "./bencodeDecoder";
 import crypto from "crypto";
+import type { Dictionary } from "./types";
 
 export interface NodeInfo {
   id: Buffer;
@@ -142,6 +143,10 @@ export default class DHT {
   private bootstrapNode: { ip: string; port: number }[] = [];
   public ID: Buffer;
   private client = dgram.createSocket("udp4");
+  public RRTracker: Map<
+    string,
+    (request: any, rinfo: dgram.RemoteInfo) => void
+  > = new Map<string, (request: any, rinfo: dgram.RemoteInfo) => void>();
 
   constructor(maxIdSpace: bigint, clientId: Buffer) {
     this.routingTable = new RoutingTable(0n, maxIdSpace, clientId);
@@ -162,8 +167,13 @@ export default class DHT {
   initialie() {
     this.client.on("message", (msg: Buffer, rinfo) => {
       console.log("Data received");
-      console.log(msg);
-      console.log(rinfo);
+      const decoded = BencodeDecoder.decodeBencode(
+        msg.toString("binary")
+      ) as Dictionary;
+      if (decoded.t) {
+        const callBackfn = this.RRTracker.get(decoded.t);
+        if (callBackfn) callBackfn(decoded, rinfo);
+      }
     });
     this.client.on("listening", () => {
       console.log(`Listening on ${this.HOST}:${this.PORT}`);
@@ -184,27 +194,30 @@ export default class DHT {
    * Ping the node
    */
   ping(ip: string, port: number) {
-    const tId = crypto
+    const txnId = crypto
       .createHash("sha1")
       .update(Math.random().toString(), "utf-8")
       .digest()
-      .subarray(0, 2);
-    const tIdString = tId.toString("binary");
-    const clientIdString = this.ID.toString("binary");
+      .subarray(0, 2)
+      .toString("binary");
 
     const msg = {
-      t: tIdString,
+      t: txnId,
       y: "q",
       q: "ping",
-      a: { id: clientIdString },
+      a: { id: this.ID.toString("binary") },
     };
     const encoded = BencodeEncoder.bencodeDictonary(msg);
     const encodedBuf = Buffer.from(String(encoded), "binary");
 
     this.client.send(encodedBuf, port, ip, (err) => {
-      console.log(`Datagram sent`);
-      console.log(`Error:`);
-      console.log(err);
+      if (err) {
+        console.log(`Connection failed to ${ip}:${port}`);
+      } else {
+        this.RRTracker.set(txnId, (request, rinfo) => {
+          console.log(`Hello`);
+        });
+      }
     });
   }
 
