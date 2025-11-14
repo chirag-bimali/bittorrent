@@ -35,10 +35,11 @@ export class Bucket {
   }
   fits(nodeId: Buffer): boolean {
     const id = Bucket.bufferToBigint(nodeId);
-    return this.min <= id && this.max > id;
+    return id >= this.min && id < this.max;
+    // return this.min <= id && this.max > id;
   }
-  static findSpaceIndex(buckets: Bucket[], node: NodeInfo): number {
-    return buckets.findIndex((bucket) => bucket.fits(node.id));
+  static findSpaceIndex(buckets: Bucket[], nodeid: Buffer): number {
+    return buckets.findIndex((bucket) => bucket.fits(nodeid));
   }
 
   split(): [Bucket, Bucket] {
@@ -51,7 +52,7 @@ export class Bucket {
     ];
 
     this.nodes.forEach((node) => {
-      const index = Bucket.findSpaceIndex(newBuckets, node);
+      const index = Bucket.findSpaceIndex(newBuckets, node.id);
       newBuckets[index].insert(node);
     });
 
@@ -68,6 +69,11 @@ export class Bucket {
   }
   static bufferToBigint(buffer: Buffer): bigint {
     return BigInt("0x" + buffer.toString("hex"));
+  }
+  static bigintToBuffer(bi: bigint): Buffer {
+    let hex = bi.toString(16);
+    if (hex.length % 2 != 0) hex = "0" + hex;
+    return Buffer.from(hex, "hex");
   }
   insert(node: NodeInfo) {
     if (!this.hasSpace()) throw new Error(`bucket has no space`);
@@ -91,7 +97,7 @@ export class RoutingTable {
     this.buckets.push(new Bucket(min, max));
   }
   insert(node: NodeInfo) {
-    let index = Bucket.findSpaceIndex(this.buckets, node);
+    let index = Bucket.findSpaceIndex(this.buckets, node.id);
     if (
       this.buckets[index].find((n): boolean => {
         return n.id.equals(node.id);
@@ -108,7 +114,7 @@ export class RoutingTable {
       // splice mutates
       this.buckets.splice(index, 1);
       this.buckets.push(...newBuckets);
-      index = Bucket.findSpaceIndex(this.buckets, node);
+      index = Bucket.findSpaceIndex(this.buckets, node.id);
       if (this.buckets[index].hasSpace()) {
         break;
       } else continue;
@@ -125,6 +131,29 @@ export class RoutingTable {
       if (node) return node;
     }
     return null;
+  }
+  findNearest(nodeId: Buffer, quantity: number): NodeInfo[] {
+    const index = Bucket.findSpaceIndex(this.buckets, nodeId);
+
+    let min = this.buckets[index].min;
+    let max = this.buckets[index].max;
+    const nodes: NodeInfo[] = [];
+
+    let left = index === -1 ? null : Bucket.bigintToBuffer(min - 1n);
+    let right = index === -1 ? null : Bucket.bigintToBuffer(max + 1n);
+
+    const bucket = this.buckets[index];
+    for (const node of bucket.nodes) {
+    }
+
+    if (index >= 0 && left) {
+      nodes.push(...this.findNearest(left, quantity - nodes.length));
+    }
+    if (index <= this.buckets.length && right) {
+      nodes.push(...this.findNearest(right, quantity - nodes.length));
+    }
+
+    return nodes;
   }
   delete(callBackfn: (node: NodeInfo) => boolean): NodeInfo[] | null {
     for (const bucket of this.buckets) {
@@ -158,7 +187,7 @@ export default class DHT {
    * "t": "transaction-id"
    * "y": "q" | "r" | "e"
    * "y": "q" | "r" | "e"
-   * "v": "versioning stuff" // not necessary
+   * "v": "versioning stuff" // not necessary for now
    */
   /*
    * Initialize DHT by calling to Bootstrap node
@@ -215,7 +244,7 @@ export default class DHT {
         console.log(`Connection failed to ${ip}:${port}`);
       } else {
         this.RRTracker.set(txnId, (request, rinfo) => {
-          console.log(`Hello`);
+          // Insert the node to rouging table.
         });
       }
     });
@@ -224,7 +253,7 @@ export default class DHT {
   /*
    * Find query to the node
    */
-  findNnode() {}
+  findNode() {}
 
   /*
    * Get peers query to the node
