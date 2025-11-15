@@ -132,6 +132,7 @@ export class RoutingTable {
     }
     return null;
   }
+  // !TEST REQUIRED
   findNearest(
     nodeId: Buffer,
     quantity: number,
@@ -207,7 +208,7 @@ export default class DHT {
   private client = dgram.createSocket("udp4");
   public RRTracker: Map<
     string,
-    (request: any, rinfo: dgram.RemoteInfo) => void
+    (err: Error | null, request: any, rinfo: dgram.RemoteInfo) => void
   > = new Map<string, (request: any, rinfo: dgram.RemoteInfo) => void>();
 
   constructor(maxIdSpace: bigint, clientId: Buffer) {
@@ -227,6 +228,7 @@ export default class DHT {
    * Join the network first
    */
   initialie() {
+    // Respond to incoming responses
     this.client.on("message", (msg: Buffer, rinfo) => {
       console.log("Data received");
       const decoded = BencodeDecoder.decodeBencode(
@@ -234,18 +236,46 @@ export default class DHT {
       ) as Dictionary;
       if (decoded.t) {
         const callBackfn = this.RRTracker.get(decoded.t);
-        if (callBackfn) callBackfn(decoded, rinfo);
+        if (callBackfn) callBackfn(null, decoded, rinfo);
       }
     });
+    // Listen on port
     this.client.on("listening", () => {
       console.log(`Listening on ${this.HOST}:${this.PORT}`);
       this.bootstrapNode.forEach((value) => {
-        this.ping(value.ip, value.port);
+        this.ping(value.ip, value.port, (err, request, rinfo) => {
+          const r = request as {
+            ip?: string;
+            r: { id: string };
+            t: string;
+            y: string;
+          };
+          const node: NodeInfo = {
+            id: Buffer.from(r.r.id, "binary"),
+            ip: rinfo.address,
+            port: rinfo.port,
+          };
+          this.routingTable.insert(node);
+          console.log(`${rinfo.address} inserted into the bucket`);
+          // Find new peers
+          // Try finding nearest node
+          console.log(request);
+          const id = Bucket.bufferToBigint(this.ID) + 10000000n;
+          this.findNode(
+            Bucket.bigintToBuffer(id),
+            node,
+            (err: Error | null, request: any, rinfo: dgram.RemoteInfo) => {
+              console.log(request);
+            }
+          );
+        });
       });
     });
+    // Handle errors
     this.client.on("error", (err) => {
       console.error("DHT socket error:", err);
     });
+    // Bind application to the port
     this.client.bind(this.PORT, this.HOST);
   }
   setBootstrap(ip: string, port: number) {
@@ -255,7 +285,15 @@ export default class DHT {
   /*
    * Ping the node
    */
-  ping(ip: string, port: number) {
+  ping(
+    ip: string,
+    port: number,
+    callbackFn: (
+      err: Error | null,
+      request: any,
+      rinfo: dgram.RemoteInfo
+    ) => void
+  ) {
     const txnId = crypto
       .createHash("sha1")
       .update(Math.random().toString(), "utf-8")
@@ -276,9 +314,7 @@ export default class DHT {
       if (err) {
         console.log(`Connection failed to ${ip}:${port}`);
       } else {
-        this.RRTracker.set(txnId, (request, rinfo) => {
-          // Insert the node to rouging table.
-        });
+        this.RRTracker.set(txnId, callbackFn);
       }
     });
   }
@@ -286,7 +322,39 @@ export default class DHT {
   /*
    * Find query to the node
    */
-  findNode() {}
+  findNode(
+    target: Buffer,
+    node: NodeInfo,
+    callbackFn: (
+      err: Error | null,
+      request: any,
+      rinfo: dgram.RemoteInfo
+    ) => void
+  ) {
+    const txnId = crypto
+      .createHash("sha1")
+      .update(Math.random().toString(), "utf-8")
+      .digest()
+      .subarray(0, 2)
+      .toString("binary");
+
+    const msg = {
+      t: txnId,
+      y: "q",
+      q: "find_node",
+      a: { id: this.ID.toString("binary"), target: target.toString("binary") },
+    };
+    const encoded = BencodeEncoder.bencodeDictonary(msg);
+    const encodedBuf = Buffer.from(String(encoded), "binary");
+
+    this.client.send(encodedBuf, node.port, node.ip, (err) => {
+      if (err) {
+        console.log(`Connection failed to ${node.ip}:${node.port}`);
+      } else {
+        this.RRTracker.set(txnId, callbackFn);
+      }
+    });
+  }
 
   /*
    * Get peers query to the node
