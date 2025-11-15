@@ -132,7 +132,15 @@ export class RoutingTable {
     }
     return null;
   }
-  findNearest(nodeId: Buffer, quantity: number): NodeInfo[] {
+  findNearest(
+    nodeId: Buffer,
+    quantity: number,
+    // r/l stands for right/left respectively
+    options: { r: boolean; l: boolean } = {
+      r: true,
+      l: true,
+    }
+  ): NodeInfo[] {
     const index = Bucket.findSpaceIndex(this.buckets, nodeId);
 
     let min = this.buckets[index].min;
@@ -143,14 +151,39 @@ export class RoutingTable {
     let right = index === -1 ? null : Bucket.bigintToBuffer(max + 1n);
 
     const bucket = this.buckets[index];
+    const distanceRecord: { node: NodeInfo; distance: bigint }[] = [];
     for (const node of bucket.nodes) {
+      distanceRecord.push({
+        node: node,
+        distance:
+          Bucket.bufferToBigint(nodeId) ^ Bucket.bufferToBigint(node.id),
+      });
     }
+    distanceRecord.sort((a, b) => {
+      if (a.distance - b.distance === 0n) return 0;
+      return a.distance - b.distance > 0 ? 1 : -1;
+    });
+    for (const dr of distanceRecord) {
+      nodes.push(dr.node);
+      if (nodes.length === quantity) break;
+    }
+    if (nodes.length === quantity) return nodes;
 
-    if (index >= 0 && left) {
-      nodes.push(...this.findNearest(left, quantity - nodes.length));
+    if (index >= 0 && left && options.l) {
+      nodes.push(
+        ...this.findNearest(left, quantity - nodes.length, {
+          l: true,
+          r: false,
+        })
+      );
     }
-    if (index <= this.buckets.length && right) {
-      nodes.push(...this.findNearest(right, quantity - nodes.length));
+    if (index <= this.buckets.length && right && options.r) {
+      nodes.push(
+        ...this.findNearest(right, quantity - nodes.length, {
+          l: false,
+          r: true,
+        })
+      );
     }
 
     return nodes;
