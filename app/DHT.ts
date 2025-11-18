@@ -1,5 +1,5 @@
 import { exit } from "process";
-import dgram from "dgram";
+import dgram, { type RemoteInfo } from "dgram";
 import BencodeEncoder from "./bencodeEncoder";
 import BencodeDecoder from "./bencodeDecoder";
 import crypto from "crypto";
@@ -399,5 +399,49 @@ export default class DHT {
   /*
    * Announce peers query to the node
    */
-  announcePeer() {}
+  /*
+  arguments:  {"id" : "<querying nodes id>",
+  "implied_port": <0 or 1>,
+  "info_hash" : "<20-byte infohash of target torrent>",
+  "port" : <port number>,
+  "token" : "<opaque token>"}
+  */
+  announcePeer(
+    infoHash: Buffer,
+    implied_port: 0 | 1,
+    port: number,
+    token: Buffer,
+    node: NodeInfo,
+    callbackfn: (err: Error | null, response: any, rinfo: RemoteInfo) => void
+  ) {
+    const txnId = crypto
+      .createHash("sha1")
+      .update(Math.random().toString(), "utf-8")
+      .digest()
+      .subarray(0, 2)
+      .toString("binary");
+
+    const msg = {
+      t: txnId,
+      y: "q",
+      q: "announce_peer",
+      a: {
+        implied_port: implied_port,
+        port: port,
+        token: token.toString("binary"),
+        id: this.ID.toString("binary"),
+        info_hash: infoHash.toString("binary"),
+      },
+    };
+    const encoded = BencodeEncoder.bencodeDictonary(msg);
+    const encodedBuf = Buffer.from(String(encoded), "binary");
+
+    this.client.send(encodedBuf, node.port, node.ip, (err) => {
+      if (err) {
+        console.log(`Connection failed to ${node.ip}:${node.port}`);
+      } else {
+        this.RRTracker.set(txnId, callbackfn);
+      }
+    });
+  }
 }
