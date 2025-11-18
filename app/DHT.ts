@@ -359,7 +359,42 @@ export default class DHT {
   /*
    * Get peers query to the node
    */
-  getPeers() {}
+  getPeers(
+    infoHash: Buffer,
+    node: NodeInfo,
+    callBackFn: (
+      err: Error | null,
+      request: any,
+      rinfo: dgram.RemoteInfo
+    ) => void
+  ) {
+    const txnId = crypto
+      .createHash("sha1")
+      .update(Math.random().toString(), "utf-8")
+      .digest()
+      .subarray(0, 2)
+      .toString("binary");
+
+    const msg = {
+      t: txnId,
+      y: "q",
+      q: "get_peers",
+      a: {
+        id: this.ID.toString("binary"),
+        info_hash: infoHash.toString("binary"),
+      },
+    };
+    const encoded = BencodeEncoder.bencodeDictonary(msg);
+    const encodedBuf = Buffer.from(String(encoded), "binary");
+
+    this.client.send(encodedBuf, node.port, node.ip, (err) => {
+      if (err) {
+        console.log(`Connection failed to ${node.ip}:${node.port}`);
+      } else {
+        this.RRTracker.set(txnId, callBackFn);
+      }
+    });
+  }
 
   /*
    * Announce peers query to the node
