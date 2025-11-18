@@ -3,6 +3,7 @@ import fs from "fs";
 import type {} from "./types";
 import Torrent from "./Torrent";
 import DHT from "./DHT";
+import type { NodeInfo } from "./DHT";
 
 const OPTION_DOWNLOAD_PATH = "-download";
 const OPTION_TORRENT_PATH = "-torrent";
@@ -45,4 +46,31 @@ export default function download(args: string[]) {
   dht.setBootstrap("router.bitcomet.com", 6881);
   dht.setBootstrap("dht.aelitis.com", 6881);
   dht.initialie();
+  dht.listen((err) => {
+    try {
+      console.log(`Listening on ${dht.HOST}:${dht.PORT}`);
+      dht.pingBootstrap((err, request, rinfo) => {
+        if (err) {
+          console.log(err.message);
+          return;
+        }
+        if (!request || !rinfo) return;
+        const r = request as {
+          ip?: string;
+          r: { id: string };
+          t: string;
+          y: string;
+        };
+        const node: NodeInfo = {
+          id: Buffer.from(r.r.id, "binary"),
+          ip: rinfo.address,
+          port: rinfo.port,
+        };
+        dht.routingTable.insert(node);
+        console.log(`contact ${node.id} saved ✔️`);
+      });
+    } catch (err: unknown) {
+      if (err instanceof Error) console.log(err.message);
+    }
+  });
 }

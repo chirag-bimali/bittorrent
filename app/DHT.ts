@@ -1,9 +1,10 @@
 import { exit } from "process";
-import dgram, { type RemoteInfo } from "dgram";
+import dgram, { Socket, type RemoteInfo } from "dgram";
 import BencodeEncoder from "./bencodeEncoder";
 import BencodeDecoder from "./bencodeDecoder";
 import crypto from "crypto";
 import type { Dictionary } from "./types";
+import { promisify } from "util";
 
 export interface NodeInfo {
   id: Buffer;
@@ -208,8 +209,8 @@ export default class DHT {
   private client = dgram.createSocket("udp4");
   public RRTracker: Map<
     string,
-    (err: Error | null, request: any, rinfo: dgram.RemoteInfo) => void
-  > = new Map<string, (request: any, rinfo: dgram.RemoteInfo) => void>();
+    (err: Error | null, request?: any, rinfo?: dgram.RemoteInfo) => void
+  > = new Map<string, (err: Error | null, request?: any, rinfo?: dgram.RemoteInfo) => void>();
 
   constructor(maxIdSpace: bigint, clientId: Buffer) {
     this.routingTable = new RoutingTable(0n, maxIdSpace, clientId);
@@ -228,55 +229,102 @@ export default class DHT {
    * Join the network first
    */
   initialie() {
-    // Respond to incoming responses
-    this.client.on("message", (msg: Buffer, rinfo) => {
-      console.log("Data received");
-      const decoded = BencodeDecoder.decodeBencode(
-        msg.toString("binary")
-      ) as Dictionary;
-      if (decoded.t) {
-        const callBackfn = this.RRTracker.get(decoded.t);
-        if (callBackfn) callBackfn(null, decoded, rinfo);
-      }
-    });
-    // Listen on port
-    this.client.on("listening", () => {
-      console.log(`Listening on ${this.HOST}:${this.PORT}`);
-      this.bootstrapNode.forEach((value) => {
-        this.ping(value.ip, value.port, (err, request, rinfo) => {
-          const r = request as {
-            ip?: string;
-            r: { id: string };
-            t: string;
-            y: string;
-          };
-          const node: NodeInfo = {
-            id: Buffer.from(r.r.id, "binary"),
-            ip: rinfo.address,
-            port: rinfo.port,
-          };
-          this.routingTable.insert(node);
-          console.log(`${rinfo.address} inserted into the bucket`);
-          // Find new peers
-          // Try finding nearest node
-          console.log(request);
-          const id = Bucket.bufferToBigint(this.ID) + 10000000n;
-          this.findNode(
-            Bucket.bigintToBuffer(id),
-            node,
-            (err: Error | null, request: any, rinfo: dgram.RemoteInfo) => {
-              console.log(request);
-            }
-          );
-        });
+    try {
+      // Respond to incoming responses
+      this.client.on("message", (msg: Buffer, rinfo) => {
+        try {
+          console.log("Data received");
+          const decoded = BencodeDecoder.decodeBencode(
+            msg.toString("binary")
+          ) as Dictionary;
+          if (decoded.t) {
+            const callBackfn = this.RRTracker.get(decoded.t);
+            if (callBackfn) callBackfn(null, decoded, rinfo);
+          }
+        } catch (err) {
+          if (err instanceof Error) throw err;
+        }
       });
+      // Handle errors
+      this.client.on("error", (err) => {
+        console.error("DHT socket error:", err);
+      });
+      // Bind application to the port
+      this.client.bind(this.PORT, this.HOST);
+    } catch (err) {
+      if (err instanceof Error) throw err;
+    }
+  }
+
+  listen(callbackfn: (err: Error | null) => void) {
+    this.client.on("listening", () => {
+      callbackfn(null);
+      // this.bootstrapNode.forEach((value) => {
+      //   this.ping(value.ip, value.port, (err, request, rinfo) => {
+      //     const r = request as {
+      //       ip?: string;
+      //       r: { id: string };
+      //       t: string;
+      //       y: string;
+      //     };
+      //     const node: NodeInfo = {
+      //       id: Buffer.from(r.r.id, "binary"),
+      //       ip: rinfo.address,
+      //       port: rinfo.port,
+      //     };
+      //     this.routingTable.insert(node);
+      //     console.log(`${rinfo.address} inserted into the bucket`);
+      //     // Find new peers
+      //     // Try finding nearest node
+      //     console.log(request);
+      //     const id = Bucket.bufferToBigint(this.ID) + 10000000n;
+      //     this.findNode(
+      //       Bucket.bigintToBuffer(id),
+      //       node,
+      //       (err: Error | null, request: any, rinfo: dgram.RemoteInfo) => {
+      //         console.log(request);
+      //       }
+      //     );
+      //   });
+      // });
     });
-    // Handle errors
-    this.client.on("error", (err) => {
-      console.error("DHT socket error:", err);
-    });
-    // Bind application to the port
-    this.client.bind(this.PORT, this.HOST);
+  }
+  pingBootstrap(
+    callbackfn: (err: Error | null, request?: any, rinfo?: RemoteInfo) => void
+  ) {
+    try {
+      this.bootstrapNode.forEach((value) => {
+        this.ping(value.ip, value.port, callbackfn);
+        // this.ping(value.ip, value.port, (err, request, rinfo) => {
+        //   const r = request as {
+        //     ip?: string;
+        //     r: { id: string };
+        //     t: string;
+        //     y: string;
+        //   };
+        //   const node: NodeInfo = {
+        //     id: Buffer.from(r.r.id, "binary"),
+        //     ip: rinfo.address,
+        //     port: rinfo.port,
+        //   };
+        //   this.routingTable.insert(node);
+        //   console.log(`${rinfo.address} inserted into the bucket`);
+        //   // Find new peers
+        //   // Try finding nearest node
+        //   console.log(request);
+        //   const id = Bucket.bufferToBigint(this.ID) + 10000000n;
+        //   this.findNode(
+        //     Bucket.bigintToBuffer(id),
+        //     node,
+        //     (err: Error | null, request: any, rinfo: dgram.RemoteInfo) => {
+        //       console.log(request);
+        //     }
+        //   );
+        // });
+      });
+    } catch (err) {
+      if (err instanceof Error) throw err;
+    }
   }
   setBootstrap(ip: string, port: number) {
     this.bootstrapNode.push({ ip, port });
@@ -285,38 +333,47 @@ export default class DHT {
   /*
    * Ping the node
    */
-  ping(
+  async ping(
     ip: string,
     port: number,
-    callbackFn: (
+    callbackfn: (
       err: Error | null,
-      request: any,
-      rinfo: dgram.RemoteInfo
+      request?: any,
+      rinfo?: dgram.RemoteInfo
     ) => void
   ) {
-    const txnId = crypto
-      .createHash("sha1")
-      .update(Math.random().toString(), "utf-8")
-      .digest()
-      .subarray(0, 2)
-      .toString("binary");
+    try {
+      const txnId = crypto
+        .createHash("sha1")
+        .update(Math.random().toString(), "utf-8")
+        .digest()
+        .subarray(0, 2)
+        .toString("binary");
 
-    const msg = {
-      t: txnId,
-      y: "q",
-      q: "ping",
-      a: { id: this.ID.toString("binary") },
-    };
-    const encoded = BencodeEncoder.bencodeDictonary(msg);
-    const encodedBuf = Buffer.from(String(encoded), "binary");
+      const msg = {
+        t: txnId,
+        y: "q",
+        q: "ping",
+        a: { id: this.ID.toString("binary") },
+      };
+      const encoded = BencodeEncoder.bencodeDictonary(msg);
+      const encodedBuf = Buffer.from(String(encoded), "binary");
 
-    this.client.send(encodedBuf, port, ip, (err) => {
-      if (err) {
-        console.log(`Connection failed to ${ip}:${port}`);
-      } else {
-        this.RRTracker.set(txnId, callbackFn);
-      }
-    });
+      this.client.send(encodedBuf, port, ip, (err) => {
+        try {
+          if (err) {
+            console.log(`Connection failed to ${ip}:${port}`);
+            callbackfn(new Error(`Connection failed to ${ip}:${port}`));
+          } else {
+            this.RRTracker.set(txnId, callbackfn);
+          }
+        } catch (err) {
+          if (err instanceof Error) throw err;
+        }
+      });
+    } catch (err: unknown) {
+      if (err instanceof Error) throw err;
+    }
   }
 
   /*
@@ -325,10 +382,10 @@ export default class DHT {
   findNode(
     target: Buffer,
     node: NodeInfo,
-    callbackFn: (
+    callbackfn: (
       err: Error | null,
-      request: any,
-      rinfo: dgram.RemoteInfo
+      request?: any,
+      rinfo?: dgram.RemoteInfo
     ) => void
   ) {
     const txnId = crypto
@@ -351,7 +408,7 @@ export default class DHT {
       if (err) {
         console.log(`Connection failed to ${node.ip}:${node.port}`);
       } else {
-        this.RRTracker.set(txnId, callbackFn);
+        this.RRTracker.set(txnId, callbackfn);
       }
     });
   }
@@ -364,8 +421,8 @@ export default class DHT {
     node: NodeInfo,
     callBackFn: (
       err: Error | null,
-      request: any,
-      rinfo: dgram.RemoteInfo
+      request?: any,
+      rinfo?: dgram.RemoteInfo
     ) => void
   ) {
     const txnId = crypto
@@ -412,7 +469,7 @@ export default class DHT {
     port: number,
     token: Buffer,
     node: NodeInfo,
-    callbackfn: (err: Error | null, response: any, rinfo: RemoteInfo) => void
+    callbackfn: (err: Error | null, response?: any, rinfo?: RemoteInfo) => void
   ) {
     const txnId = crypto
       .createHash("sha1")
