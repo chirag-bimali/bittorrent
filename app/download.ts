@@ -68,6 +68,7 @@ export default function download(args: string[]) {
         };
         dht.routingTable.insert(node);
         console.log(`contact ${node.id} saved ✔️`);
+        dht.fill();
       });
     } catch (err: unknown) {
       if (err instanceof Error) console.log(err.message);

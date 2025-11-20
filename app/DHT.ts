@@ -10,6 +10,7 @@ export interface NodeInfo {
   id: Buffer;
   ip: string;
   port: number;
+  lastseen?: Date
 }
 // bucket operation
 // insert node ✓
@@ -255,38 +256,14 @@ export default class DHT {
       if (err instanceof Error) throw err;
     }
   }
+  fill() {
+    // Filling Rouging table
+
+  }
 
   listen(callbackfn: (err: Error | null) => void) {
     this.client.on("listening", () => {
       callbackfn(null);
-      // this.bootstrapNode.forEach((value) => {
-      //   this.ping(value.ip, value.port, (err, request, rinfo) => {
-      //     const r = request as {
-      //       ip?: string;
-      //       r: { id: string };
-      //       t: string;
-      //       y: string;
-      //     };
-      //     const node: NodeInfo = {
-      //       id: Buffer.from(r.r.id, "binary"),
-      //       ip: rinfo.address,
-      //       port: rinfo.port,
-      //     };
-      //     this.routingTable.insert(node);
-      //     console.log(`${rinfo.address} inserted into the bucket`);
-      //     // Find new peers
-      //     // Try finding nearest node
-      //     console.log(request);
-      //     const id = Bucket.bufferToBigint(this.ID) + 10000000n;
-      //     this.findNode(
-      //       Bucket.bigintToBuffer(id),
-      //       node,
-      //       (err: Error | null, request: any, rinfo: dgram.RemoteInfo) => {
-      //         console.log(request);
-      //       }
-      //     );
-      //   });
-      // });
     });
   }
   pingBootstrap(
