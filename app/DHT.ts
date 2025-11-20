@@ -25,12 +25,14 @@ export class Bucket {
   public max: bigint;
   public min: bigint;
   public size: number;
+  public lastRefresh: Date;
   constructor(min: bigint, max: bigint, size: number = 8) {
     if (max <= min) throw new Error(`max: ${max} <= min : ${min}`);
     this.max = max;
     this.min = min;
     if (size <= 0) throw new Error(`size must be <= 1, size: ${size}`);
     this.size = size;
+    this.lastRefresh = new Date();
   }
   hasSpace(): boolean {
     return this.nodes.length < this.size;
