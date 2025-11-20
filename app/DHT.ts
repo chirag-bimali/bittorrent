@@ -1,4 +1,3 @@
-import { exit } from "process";
 import dgram, { Socket, type RemoteInfo } from "dgram";
 import BencodeEncoder from "./bencodeEncoder";
 import BencodeDecoder from "./bencodeDecoder";
@@ -25,14 +24,14 @@ export class Bucket {
   public max: bigint;
   public min: bigint;
   public size: number;
-  public lastRefresh: Date;
+  public changedAt: Date;
   constructor(min: bigint, max: bigint, size: number = 8) {
     if (max <= min) throw new Error(`max: ${max} <= min : ${min}`);
     this.max = max;
     this.min = min;
     if (size <= 0) throw new Error(`size must be <= 1, size: ${size}`);
     this.size = size;
-    this.lastRefresh = new Date();
+    this.changedAt = new Date();
   }
   public hasSpace(): boolean {
     return this.nodes.length < this.size;
@@ -154,11 +153,15 @@ export class RoutingTable {
     let max = this.buckets[index].max;
     const nodes: NodeInfo[] = [];
 
-    let left = index === -1 ? null : Bucket.bigintToBuffer(min - 1n);
-    let right = index === -1 ? null : Bucket.bigintToBuffer(max + 1n);
+    let left =
+      index === -1 || index - 1 <= 0 ? null : Bucket.bigintToBuffer(min - 1n);
+    let right =
+      index === -1 || index + 1 >= this.buckets.length
+        ? null
+        : Bucket.bigintToBuffer(max + 1n);
 
     const bucket = this.buckets[index];
-    const distanceRecord: { node: NodeInfo; distance: bigint }[] = [];
+    let distanceRecord: { node: NodeInfo; distance: bigint }[] = [];
     for (const node of bucket.nodes) {
       distanceRecord.push({
         node: node,
@@ -166,7 +169,8 @@ export class RoutingTable {
           Bucket.bufferToBigint(nodeId) ^ Bucket.bufferToBigint(node.id),
       });
     }
-    distanceRecord.sort((a, b) => {
+
+    distanceRecord = distanceRecord.sort((a, b) => {
       if (a.distance - b.distance === 0n) return 0;
       return a.distance - b.distance > 0 ? 1 : -1;
     });
@@ -207,6 +211,7 @@ export default class DHT {
   public routingTable: RoutingTable;
   public maxIdSpace: bigint;
   public infoHashNode: Map<Buffer, NodeInfo[]> = new Map<Buffer, NodeInfo[]>();
+  public BOOTSTRAP_NODE_LOADED: boolean = false;
   public PORT: number = 6881;
   public HOST: string = "0.0.0.0";
   private bootstrapNode: { ip: string; port: number }[] = [];
@@ -264,7 +269,60 @@ export default class DHT {
     }
   }
   fill() {
-    // Filling Rouging table
+    // console.log(this.routingTable.buckets);
+    const nodes = this.routingTable.findNearest(this.ID, 8);
+    console.log(nodes);
+    nodes.forEach((node) => {
+      this.findNode(this.ID, node, (err, request, rinfo) => {
+        if (err) {
+          console.log(err.message);
+          return;
+        }
+        const r = request as {
+          t: Buffer;
+          y: string;
+          r: { id: Buffer; nodes: string };
+        };
+        /**
+         * Response = {"t":"aa", "y":"r", "r": {"id":"0123456789abcdefghij", "nodes": "def456..."}}
+         */
+        let nodeInfosBuffer: Buffer[] = [];
+        if (r.r.nodes.length % 26 !== 0) {
+          throw new Error(`Unable to parse compact node info`);
+        }
+        const total = r.r.nodes.length / 26;
+        const temp = Buffer.from(r.r.nodes, "binary");
+        for (let i = 0; i < total; i++) {
+          nodeInfosBuffer.push(temp.subarray(i * 26, (i + 1) * 26));
+          // console.log(nodeInfosBuffer[i]);
+        }
+        const nodes: NodeInfo[] = [];
+        nodeInfosBuffer.forEach((buffer) => {
+          const id = buffer.subarray(0, 20);
+          const ip = buffer.subarray(20, 24);
+          const ipStr = `${ip[0]}.${ip[1]}.${ip[2]}.${ip[3]}`;
+          const port = buffer.subarray(24, 26);
+
+          const node: NodeInfo = {
+            id: id,
+            ip: ipStr,
+            port: port.readUInt16LE(0),
+          };
+
+          nodes.push(node);
+          console.log(node);
+        });
+        // console.log(nodes);
+        nodes.forEach((node) => {
+          const f = this.routingTable.find((n) => {
+            return node.id.equals(n.id);
+          });
+          if (f === null) {
+            this.routingTable.insert(node);
+          }
+        });
+      });
+    });
   }
 
   listen(callbackfn: (err: Error | null) => void) {

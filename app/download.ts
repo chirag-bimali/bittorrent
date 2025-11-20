@@ -67,11 +67,17 @@ export default function download(args: string[]) {
           port: rinfo.port,
         };
         dht.routingTable.insert(node);
+        dht.BOOTSTRAP_NODE_LOADED = true;
         console.log(`contact ${node.id} saved ✔️`);
-        dht.fill();
       });
     } catch (err: unknown) {
       if (err instanceof Error) console.log(err.message);
     }
   });
+  const checkerId = setInterval(() => {
+    if (!dht.BOOTSTRAP_NODE_LOADED) return;
+
+    clearInterval(checkerId)
+    dht.fill();
+  }, 10000);
 }
