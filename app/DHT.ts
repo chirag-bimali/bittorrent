@@ -10,7 +10,7 @@ export interface NodeInfo {
   id: Buffer;
   ip: string;
   port: number;
-  lastseen?: Date
+  lastseen?: Date;
 }
 // bucket operation
 // insert node ✓
@@ -34,19 +34,16 @@ export class Bucket {
     this.size = size;
     this.lastRefresh = new Date();
   }
-  hasSpace(): boolean {
+  public hasSpace(): boolean {
     return this.nodes.length < this.size;
   }
-  fits(nodeId: Buffer): boolean {
+  public fits(nodeId: Buffer): boolean {
     const id = Bucket.bufferToBigint(nodeId);
     return id >= this.min && id < this.max;
     // return this.min <= id && this.max > id;
   }
-  static findSpaceIndex(buckets: Bucket[], nodeid: Buffer): number {
-    return buckets.findIndex((bucket) => bucket.fits(nodeid));
-  }
 
-  split(): [Bucket, Bucket] {
+  public split(): [Bucket, Bucket] {
     if (this.hasSpace()) throw new Error(`bucket is not full`);
 
     const mid = (this.min + this.max) >> 1n;
@@ -62,24 +59,16 @@ export class Bucket {
 
     return [newBuckets[0], newBuckets[1]];
   }
-  find(callBackfn: (node: NodeInfo) => boolean): NodeInfo | null {
+  public find(callBackfn: (node: NodeInfo) => boolean): NodeInfo | null {
     const node = this.nodes.find(callBackfn);
     return node ? node : null;
   }
-  delete(callBackfn: (node: NodeInfo) => boolean): NodeInfo[] | null {
+  public delete(callBackfn: (node: NodeInfo) => boolean): NodeInfo[] | null {
     const index = this.nodes.findIndex(callBackfn);
     if (index < 0) return null;
     return this.nodes.splice(index, 1);
   }
-  static bufferToBigint(buffer: Buffer): bigint {
-    return BigInt("0x" + buffer.toString("hex"));
-  }
-  static bigintToBuffer(bi: bigint): Buffer {
-    let hex = bi.toString(16);
-    if (hex.length % 2 != 0) hex = "0" + hex;
-    return Buffer.from(hex, "hex");
-  }
-  insert(node: NodeInfo) {
+  public insert(node: NodeInfo) {
     if (!this.hasSpace()) throw new Error(`bucket has no space`);
 
     const id = Bucket.bufferToBigint(node.id);
@@ -88,7 +77,20 @@ export class Bucket {
       this.nodes.push(node);
     } else throw new Error(`invalid range for node id`);
   }
+
+  static bufferToBigint(buffer: Buffer): bigint {
+    return BigInt("0x" + buffer.toString("hex"));
+  }
+  static bigintToBuffer(bi: bigint): Buffer {
+    let hex = bi.toString(16);
+    if (hex.length % 2 != 0) hex = "0" + hex;
+    return Buffer.from(hex, "hex");
+  }
+  static findSpaceIndex(buckets: Bucket[], nodeid: Buffer): number {
+    return buckets.findIndex((bucket) => bucket.fits(nodeid));
+  }
 }
+
 export class RoutingTable {
   public min: bigint;
   public max: bigint;
@@ -213,7 +215,10 @@ export default class DHT {
   public RRTracker: Map<
     string,
     (err: Error | null, request?: any, rinfo?: dgram.RemoteInfo) => void
-  > = new Map<string, (err: Error | null, request?: any, rinfo?: dgram.RemoteInfo) => void>();
+  > = new Map<
+    string,
+    (err: Error | null, request?: any, rinfo?: dgram.RemoteInfo) => void
+  >();
 
   constructor(maxIdSpace: bigint, clientId: Buffer) {
     this.routingTable = new RoutingTable(0n, maxIdSpace, clientId);
@@ -260,7 +265,6 @@ export default class DHT {
   }
   fill() {
     // Filling Rouging table
-
   }
 
   listen(callbackfn: (err: Error | null) => void) {
