@@ -4,6 +4,7 @@ import type {} from "./types";
 import Torrent from "./Torrent";
 import DHT from "./DHT";
 import type { NodeInfo } from "./DHT";
+import type { RemoteInfo } from "dgram";
 
 const OPTION_DOWNLOAD_PATH = "-download";
 const OPTION_TORRENT_PATH = "-torrent";
@@ -74,10 +75,15 @@ export default function download(args: string[]) {
       if (err instanceof Error) console.log(err.message);
     }
   });
+  const calledNodes: NodeInfo[] = []
   const checkerId = setInterval(() => {
     if (!dht.BOOTSTRAP_NODE_LOADED) return;
 
     clearInterval(checkerId)
-    dht.fill();
+    const nearest = dht.routingTable.findNearest(dht.ID, 3)
+    dht.fill(nearest, 1, dht.ID, (err: Error | null, request?: unknown, rinfo?: RemoteInfo) => {
+
+
+    }, calledNodes);
   }, 10000);
 }

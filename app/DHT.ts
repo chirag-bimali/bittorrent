@@ -268,7 +268,22 @@ export default class DHT {
       if (err instanceof Error) throw err;
     }
   }
-  fill() {
+  fill(
+    nearestNodes: NodeInfo[],
+    size: number,
+    referenceId: Buffer,
+    callbackfn: (err: Error | null, request?: any, rinfo?: RemoteInfo) => void,
+    calledNodes: NodeInfo[]
+  ) {
+    for (let i = 0; i < size; i++) {
+      const calledNode = calledNodes.find((node) => {
+        return node.id.equals(nearestNodes[i].id);
+      });
+      if (!calledNode) continue;
+      this.findNode(referenceId, nearestNodes[i], callbackfn);
+      calledNodes.push(nearestNodes[i]);
+    }
+    return;
     // console.log(this.routingTable.buckets);
     const nodes = this.routingTable.findNearest(this.ID, 8);
     console.log(nodes);
