@@ -75,15 +75,88 @@ export default function download(args: string[]) {
       if (err instanceof Error) console.log(err.message);
     }
   });
-  const calledNodes: NodeInfo[] = []
+  const calledNodes: NodeInfo[] = [];
   const checkerId = setInterval(() => {
     if (!dht.BOOTSTRAP_NODE_LOADED) return;
+    // Run after bootstrap node is loaded
+    clearInterval(checkerId);
 
-    clearInterval(checkerId)
-    const nearest = dht.routingTable.findNearest(dht.ID, 3)
-    dht.fill(nearest, 1, dht.ID, (err: Error | null, request?: unknown, rinfo?: RemoteInfo) => {
+    let nearest = dht.routingTable.findNearest(dht.ID, 3);
+    calledNodes.push(...nearest);
+    const fillHandler = (
+      err: Error | null,
+      request?: unknown,
+      rinfo?: RemoteInfo
+    ) => {
+      if (err) {
+        console.error(err);
+        return;
+      }
 
+      const r = request as {
+        t: Buffer;
+        y: string;
+        r: { id: Buffer; nodes: string };
+      };
+      /**
+       * Response = {"t":"aa", "y":"r", "r": {"id":"0123456789abcdefghij", "nodes": "def456..."}}
+       */
+      // Check if buffer can be parsed
+      let nodeInfosBuffer: Buffer[] = [];
+      if (r.r.nodes.length % 26 !== 0) {
+        throw new Error(`Unable to parse compact node info`);
+      }
 
-    }, calledNodes);
+      // Split the response into individual unit
+      const total = r.r.nodes.length / 26;
+      const temp = Buffer.from(r.r.nodes, "binary");
+      for (let i = 0; i < total; i++) {
+        nodeInfosBuffer.push(temp.subarray(i * 26, (i + 1) * 26));
+        // console.log(nodeInfosBuffer[i]);
+      }
+
+      // Structure the response
+      const nodes: NodeInfo[] = [];
+      nodeInfosBuffer.forEach((buffer) => {
+        const id = buffer.subarray(0, 20);
+        const ip = buffer.subarray(20, 24);
+        const ipStr = `${ip[0]}.${ip[1]}.${ip[2]}.${ip[3]}`;
+        const port = buffer.subarray(24, 26);
+
+        const node: NodeInfo = {
+          id: id,
+          ip: ipStr,
+          port: port.readUInt16LE(0),
+        };
+
+        nodes.push(node);
+        console.log(node);
+      });
+
+      // Save the response
+      nodes.forEach((node) => {
+        const f = dht.routingTable.find((n) => {
+          return node.id.equals(n.id);
+        });
+        if (f === null) {
+          dht.routingTable.insert(node);
+        }
+      });
+
+      // Repeat queary
+      let newNearestNode = dht.routingTable.findNearest(dht.ID, 2);
+      newNearestNode = newNearestNode.filter((nNNode: NodeInfo) => {
+        const found = calledNodes.find((cNode: NodeInfo) => {
+          return nNNode.id.equals(cNode.id);
+        })
+        if (found) return true;
+        else false;
+      })
+      if (newNearestNode.length === 0) {
+        console.log(`table filled succesfully`);
+      };
+      dht.fill(newNearestNode, dht.ID, fillHandler);
+    };
+    dht.fill(nearest, dht.ID, fillHandler);
   }, 10000);
 }

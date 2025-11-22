@@ -148,6 +148,7 @@ export class RoutingTable {
     }
   ): NodeInfo[] {
     const index = Bucket.findSpaceIndex(this.buckets, nodeId);
+    console.log(this.buckets)
 
     let min = this.buckets[index].min;
     let max = this.buckets[index].max;
@@ -270,74 +271,12 @@ export default class DHT {
   }
   fill(
     nearestNodes: NodeInfo[],
-    size: number,
     referenceId: Buffer,
-    callbackfn: (err: Error | null, request?: any, rinfo?: RemoteInfo) => void,
-    calledNodes: NodeInfo[]
+    callbackfn: (err: Error | null, request?: any, rinfo?: RemoteInfo) => void
   ) {
-    for (let i = 0; i < size; i++) {
-      const calledNode = calledNodes.find((node) => {
-        return node.id.equals(nearestNodes[i].id);
-      });
-      if (!calledNode) continue;
-      this.findNode(referenceId, nearestNodes[i], callbackfn);
-      calledNodes.push(nearestNodes[i]);
+    for (const nearestNode of nearestNodes) {
+      this.findNode(referenceId, nearestNode, callbackfn);
     }
-    return;
-    // console.log(this.routingTable.buckets);
-    const nodes = this.routingTable.findNearest(this.ID, 8);
-    console.log(nodes);
-    nodes.forEach((node) => {
-      this.findNode(this.ID, node, (err, request, rinfo) => {
-        if (err) {
-          console.log(err.message);
-          return;
-        }
-        const r = request as {
-          t: Buffer;
-          y: string;
-          r: { id: Buffer; nodes: string };
-        };
-        /**
-         * Response = {"t":"aa", "y":"r", "r": {"id":"0123456789abcdefghij", "nodes": "def456..."}}
-         */
-        let nodeInfosBuffer: Buffer[] = [];
-        if (r.r.nodes.length % 26 !== 0) {
-          throw new Error(`Unable to parse compact node info`);
-        }
-        const total = r.r.nodes.length / 26;
-        const temp = Buffer.from(r.r.nodes, "binary");
-        for (let i = 0; i < total; i++) {
-          nodeInfosBuffer.push(temp.subarray(i * 26, (i + 1) * 26));
-          // console.log(nodeInfosBuffer[i]);
-        }
-        const nodes: NodeInfo[] = [];
-        nodeInfosBuffer.forEach((buffer) => {
-          const id = buffer.subarray(0, 20);
-          const ip = buffer.subarray(20, 24);
-          const ipStr = `${ip[0]}.${ip[1]}.${ip[2]}.${ip[3]}`;
-          const port = buffer.subarray(24, 26);
-
-          const node: NodeInfo = {
-            id: id,
-            ip: ipStr,
-            port: port.readUInt16LE(0),
-          };
-
-          nodes.push(node);
-          console.log(node);
-        });
-        // console.log(nodes);
-        nodes.forEach((node) => {
-          const f = this.routingTable.find((n) => {
-            return node.id.equals(n.id);
-          });
-          if (f === null) {
-            this.routingTable.insert(node);
-          }
-        });
-      });
-    });
   }
 
   listen(callbackfn: (err: Error | null) => void) {
