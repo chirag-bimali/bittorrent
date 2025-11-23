@@ -148,15 +148,16 @@ export class RoutingTable {
     }
   ): NodeInfo[] {
     const index = Bucket.findSpaceIndex(this.buckets, nodeId);
-    console.log(this.buckets)
+
+    if(index === -1) return [];
 
     let min = this.buckets[index].min;
     let max = this.buckets[index].max;
     const nodes: NodeInfo[] = [];
 
-    let left =
+    let left: Buffer | null =
       index === -1 || index - 1 <= 0 ? null : Bucket.bigintToBuffer(min - 1n);
-    let right =
+    let right: Buffer | null =
       index === -1 || index + 1 >= this.buckets.length
         ? null
         : Bucket.bigintToBuffer(max + 1n);
