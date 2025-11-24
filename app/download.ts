@@ -6,11 +6,11 @@ import DHT from "./DHT";
 import type { NodeInfo } from "./DHT";
 import type { RemoteInfo } from "dgram";
 
-const OPTION_DOWNLOAD_PATH = "-download";
+const OPTION_DOWNLOAD_PATH = "-output";
 const OPTION_TORRENT_PATH = "-torrent";
 
 function argumentParser(args: string[]): {
-  download: string;
+  output: string;
   torrent: string;
 } {
   const downloadOptionIndex = args.findIndex((arg) => {
@@ -30,7 +30,7 @@ function argumentParser(args: string[]): {
   const downloadPath = args[downloadOptionIndex + 1];
   const torrentFilePath = args[torrentPathOptionIndex + 1];
   return {
-    download: downloadPath,
+    output: downloadPath,
     torrent: torrentFilePath,
   };
 }
