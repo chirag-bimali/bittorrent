@@ -137,7 +137,7 @@ export class RoutingTable {
     }
     return null;
   }
-  // !TEST REQUIRED
+
   findNearest(
     nodeId: Buffer,
     quantity: number,
@@ -149,7 +149,7 @@ export class RoutingTable {
   ): NodeInfo[] {
     const index = Bucket.findSpaceIndex(this.buckets, nodeId);
 
-    if(index === -1) return [];
+    if (index === -1) return [];
 
     let min = this.buckets[index].min;
     let max = this.buckets[index].max;
@@ -208,13 +208,21 @@ export class RoutingTable {
     }
     return null;
   }
+  save(location: string) {
+    const encoded = BencodeEncoder.bencodeList(this.buckets);
+    console.log("-------------");
+    console.log(encoded);
+    const decoded = BencodeDecoder.decodeBencodeList(encoded)
+    console.log(decoded)
+    console.log("-------------");
+  }
 }
 export default class DHT {
   public routingTable: RoutingTable;
   public maxIdSpace: bigint;
   public infoHashNode: Map<Buffer, NodeInfo[]> = new Map<Buffer, NodeInfo[]>();
   public BOOTSTRAP_NODE_LOADED: boolean = false;
-  public PORT: number = 6881;
+  public PORT: number = 6882;
   public HOST: string = "0.0.0.0";
   private bootstrapNode: { ip: string; port: number }[] = [];
   public ID: Buffer;
@@ -265,7 +273,8 @@ export default class DHT {
         console.error("DHT socket error:", err);
       });
       // Bind application to the port
-      this.client.bind(this.PORT, this.HOST);
+      this.client.bind(this.PORT);
+      // this.client.bind(this.PORT, this.HOST);
     } catch (err) {
       if (err instanceof Error) throw err;
     }
