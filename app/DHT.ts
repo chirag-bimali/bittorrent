@@ -3,7 +3,7 @@ import BencodeEncoder from "./bencodeEncoder";
 import BencodeDecoder from "./bencodeDecoder";
 import crypto from "crypto";
 import type { Dictionary } from "./types";
-import { promisify } from "util";
+import fs from "fs";
 
 export interface NodeInfo {
   id: Buffer;
@@ -208,13 +208,20 @@ export class RoutingTable {
     }
     return null;
   }
-  save(location: string) {
+  save(path: string) {
     const encoded = BencodeEncoder.bencodeList(this.buckets);
-    console.log("-------------");
-    console.log(encoded);
-    const decoded = BencodeDecoder.decodeBencodeList(encoded)
-    console.log(decoded)
-    console.log("-------------");
+    const fd = fs.openSync(path, "w+");
+    fs.writeFileSync(fd, encoded, { encoding: "binary" });
+    fs.closeSync(fd);
+  }
+  load(path: string) {
+    const fd = fs.openSync(path, "r+");
+    const encoded = fs.readFileSync(fd, { encoding: "binary" });
+    const [decoded, total] = BencodeDecoder.decodeBencodeList(encoded) as [
+      Bucket[],
+      number
+    ];
+    this.buckets = decoded;
   }
 }
 export default class DHT {

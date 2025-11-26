@@ -83,7 +83,6 @@ export default function download(args: string[]) {
 
     let nearest = dht.routingTable.findNearest(dht.ID, 10);
     calledNodes.push(...nearest);
-    dht.routingTable.save(".")
     const fillHandler = (
       err: Error | null,
       request?: unknown,
@@ -152,13 +151,19 @@ export default function download(args: string[]) {
         if (found) return true;
         else false;
       })
+      console.log(`calling...`)
       if (newNearestNode.length === 0) {
         console.log(`table filled succesfully`);
         console.log(dht.routingTable.buckets)
-        dht.routingTable.save(argObj.output)
+        dht.routingTable.save("./rt")
       };
       dht.fill(newNearestNode, dht.ID, fillHandler);
     };
     //  dht.fill(nearest, dht.ID, fillHandler);
+    dht.routingTable.load("./rt")
+    console.log("-------------------")
+    for (const bucket of dht.routingTable.buckets) {
+      console.log(bucket)
+    }
   }, 10000);
 }

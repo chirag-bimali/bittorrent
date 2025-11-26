@@ -10,6 +10,11 @@ class BencodeEncoder {
   static bencodeString(str: string): string {
     return `${str.length}:${str}`;
   }
+
+  static bencodeBigint(bi: bigint): string {
+    const str = bi.toString();
+    return `${str.length}:${str}`;
+  }
   static bencodeBuffer({ buf }: { buf: Buffer }): string {
     const hex = buf.toString("base64");
     return `${hex.length}:${hex}`;
@@ -27,6 +32,8 @@ class BencodeEncoder {
         value += this.bencodeString(item);
       } else if (typeof item == "number") {
         value += this.bencodeInteger(item);
+      } else if (typeof item === "bigint") {
+        value += this.bencodeBigint(item);
       } else if (Buffer.isBuffer(item)) {
         value += this.bencodeBuffer({ buf: item });
       } else if (Array.isArray(item)) {
@@ -36,7 +43,6 @@ class BencodeEncoder {
       } else if (typeof item === "object" && item !== null) {
         value += this.bencodeDictonary(item);
       }
-      console.log(value);
     }
     return value + "e";
   }
@@ -55,6 +61,8 @@ class BencodeEncoder {
         value += this.bencodeString(val);
       } else if (typeof val === "number") {
         value += this.bencodeInteger(val);
+      } else if (typeof val === "bigint") {
+        value += this.bencodeBigint(val);
       } else if (Buffer.isBuffer(val)) {
         value += this.bencodeBuffer({ buf: val });
       } else if (Array.isArray(val)) {
