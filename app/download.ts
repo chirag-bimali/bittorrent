@@ -46,6 +46,7 @@ export default function download(args: string[]) {
   dht.setBootstrap("dht.transmissionbt.com", 6881);
   dht.setBootstrap("router.bitcomet.com", 6881);
   dht.setBootstrap("dht.aelitis.com", 6881);
+  dht.routingTable.load("./rt");
   dht.initialie();
   dht.listen((err) => {
     try {
@@ -67,8 +68,16 @@ export default function download(args: string[]) {
           ip: rinfo.address,
           port: rinfo.port,
         };
-        dht.routingTable.insert(node);
+        if (
+          dht.routingTable.find((n) => {
+            return n.id.equals(node.id);
+          })
+        ) {
+          console.log(`contact ${node.id} already saved ✔️`);
         dht.BOOTSTRAP_NODE_LOADED = true;
+          return;
+        }
+        dht.routingTable.insert(node);
         console.log(`contact ${node.id} saved ✔️`);
       });
     } catch (err: unknown) {
@@ -147,23 +156,16 @@ export default function download(args: string[]) {
       newNearestNode = newNearestNode.filter((nNNode: NodeInfo) => {
         const found = calledNodes.find((cNode: NodeInfo) => {
           return nNNode.id.equals(cNode.id);
-        })
+        });
         if (found) return true;
         else false;
-      })
-      console.log(`calling...`)
+      });
       if (newNearestNode.length === 0) {
-        console.log(`table filled succesfully`);
-        console.log(dht.routingTable.buckets)
-        dht.routingTable.save("./rt")
-      };
+        dht.routingTable.save("./rt");
+        return;
+      }
       dht.fill(newNearestNode, dht.ID, fillHandler);
     };
-    //  dht.fill(nearest, dht.ID, fillHandler);
-    dht.routingTable.load("./rt")
-    console.log("-------------------")
-    for (const bucket of dht.routingTable.buckets) {
-      console.log(bucket)
-    }
+     dht.fill(nearest, dht.ID, fillHandler);
   }, 10000);
 }

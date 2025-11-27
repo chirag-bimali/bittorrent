@@ -103,6 +103,11 @@ export class RoutingTable {
   }
   insert(node: NodeInfo) {
     let index = Bucket.findSpaceIndex(this.buckets, node.id);
+
+    if (index < 0)
+      throw new Error(
+        `could not find space for the node ${Bucket.bufferToBigint(node.id)}`
+      );
     if (
       this.buckets[index].find((n): boolean => {
         return n.id.equals(node.id);
@@ -110,10 +115,6 @@ export class RoutingTable {
     ) {
       throw new Error("no duplicates allowed");
     }
-    if (index < 0)
-      throw new Error(
-        `could not find space for the node ${node.id.toString("hex")}`
-      );
     while (!this.buckets[index].hasSpace()) {
       const newBuckets = this.buckets[index].split();
       // splice mutates
@@ -209,7 +210,11 @@ export class RoutingTable {
     return null;
   }
   save(path: string) {
-    const encoded = BencodeEncoder.bencodeList(this.buckets);
+    const nodes: NodeInfo[] = [];
+    this.buckets.forEach((value) => {
+      nodes.push(...value.nodes);
+    });
+    const encoded = BencodeEncoder.bencodeList(nodes);
     const fd = fs.openSync(path, "w+");
     fs.writeFileSync(fd, encoded, { encoding: "binary" });
     fs.closeSync(fd);
@@ -217,11 +222,21 @@ export class RoutingTable {
   load(path: string) {
     const fd = fs.openSync(path, "r+");
     const encoded = fs.readFileSync(fd, { encoding: "binary" });
-    const [decoded, total] = BencodeDecoder.decodeBencodeList(encoded) as [
-      Bucket[],
-      number
-    ];
-    this.buckets = decoded;
+    const [datas, total] = BencodeDecoder.decodeBencodeList(encoded);
+    const nodes: NodeInfo[] = datas.map(
+      (value: { id: string; ip: string; port: number }) => {
+        const node: NodeInfo = {
+          id: Buffer.from(value.id, "binary"),
+          ip: value.ip,
+          port: value.port,
+        };
+        return node;
+      }
+    );
+    console.log(nodes)
+    nodes.forEach((node) => {
+      this.insert(node);
+    });
   }
 }
 export default class DHT {
@@ -419,6 +434,7 @@ export default class DHT {
     this.client.send(encodedBuf, node.port, node.ip, (err) => {
       if (err) {
         console.log(`Connection failed to ${node.ip}:${node.port}`);
+        callbackfn(err)
       } else {
         this.RRTracker.set(txnId, callbackfn);
       }

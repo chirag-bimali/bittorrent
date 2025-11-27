@@ -16,7 +16,7 @@ class BencodeEncoder {
     return `${str.length}:${str}`;
   }
   static bencodeBuffer({ buf }: { buf: Buffer }): string {
-    const hex = buf.toString("base64");
+    const hex = buf.toString("binary");
     return `${hex.length}:${hex}`;
   }
   static bencodeDate({ dateObj }: { dateObj: Date }): string {
