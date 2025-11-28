@@ -308,7 +308,11 @@ export default class DHT {
   fill(
     nearestNodes: NodeInfo[],
     referenceId: Buffer,
-    callbackfn: (err: Error | null, request?: any, rinfo?: RemoteInfo) => void
+    callbackfn: (
+      err: Error | null,
+      request?: NodeInfo[],
+      rinfo?: RemoteInfo
+    ) => void
   ) {
     for (const nearestNode of nearestNodes) {
       this.findNode(referenceId, nearestNode, callbackfn);
@@ -321,37 +325,20 @@ export default class DHT {
     });
   }
   pingBootstrap(
-    callbackfn: (err: Error | null, request?: any, rinfo?: RemoteInfo) => void
+    callbackfn: (
+      err: Error | null,
+      request?: {
+        ip?: string;
+        r: { id: string };
+        t: string;
+        y: string;
+      },
+      rinfo?: RemoteInfo
+    ) => void
   ) {
     try {
       this.bootstrapNode.forEach((value) => {
         this.ping(value.ip, value.port, callbackfn);
-        // this.ping(value.ip, value.port, (err, request, rinfo) => {
-        //   const r = request as {
-        //     ip?: string;
-        //     r: { id: string };
-        //     t: string;
-        //     y: string;
-        //   };
-        //   const node: NodeInfo = {
-        //     id: Buffer.from(r.r.id, "binary"),
-        //     ip: rinfo.address,
-        //     port: rinfo.port,
-        //   };
-        //   this.routingTable.insert(node);
-        //   console.log(`${rinfo.address} inserted into the bucket`);
-        //   // Find new peers
-        //   // Try finding nearest node
-        //   console.log(request);
-        //   const id = Bucket.bufferToBigint(this.ID) + 10000000n;
-        //   this.findNode(
-        //     Bucket.bigintToBuffer(id),
-        //     node,
-        //     (err: Error | null, request: any, rinfo: dgram.RemoteInfo) => {
-        //       console.log(request);
-        //     }
-        //   );
-        // });
       });
     } catch (err) {
       if (err instanceof Error) throw err;
@@ -369,7 +356,12 @@ export default class DHT {
     port: number,
     callbackfn: (
       err: Error | null,
-      request?: any,
+      request?: {
+        ip?: string;
+        r: { id: string };
+        t: string;
+        y: string;
+      },
       rinfo?: dgram.RemoteInfo
     ) => void
   ) {
@@ -396,7 +388,24 @@ export default class DHT {
             console.log(`Connection failed to ${ip}:${port}`);
             callbackfn(new Error(`Connection failed to ${ip}:${port}`));
           } else {
-            this.RRTracker.set(txnId, callbackfn);
+            this.RRTracker.set(
+              txnId,
+              (err, request?: any, rinfo?: RemoteInfo) => {
+                const response: {
+                  ip?: string;
+                  r: { id: string };
+                  t: string;
+                  y: string;
+                } = {
+                  ip: request.ip,
+                  r: { id: request?.r?.id },
+                  t: request.t,
+                  y: request.t,
+                };
+
+                callbackfn(null, response, rinfo);
+              }
+            );
           }
         } catch (err) {
           if (err instanceof Error) throw err;
@@ -415,7 +424,7 @@ export default class DHT {
     node: NodeInfo,
     callbackfn: (
       err: Error | null,
-      request?: any,
+      request?: NodeInfo[],
       rinfo?: dgram.RemoteInfo
     ) => void
   ) {
@@ -438,9 +447,55 @@ export default class DHT {
     this.client.send(encodedBuf, node.port, node.ip, (err) => {
       if (err) {
         console.log(`Connection failed to ${node.ip}:${node.port}`);
-        callbackfn(err)
+        callbackfn(err);
       } else {
-        this.RRTracker.set(txnId, callbackfn);
+        console.log(`setting find_node responder`);
+        this.RRTracker.set(txnId, (err, request?: any, rinfo?: RemoteInfo) => {
+          console.log(`find_node response incomming...`)
+          if (err) {
+            callbackfn(err);
+            return;
+          }
+
+          const r = request as {
+            t: Buffer;
+            y: string;
+            r: { id: Buffer; nodes: string };
+          };
+
+          // Check if buffer can be parsed
+          let nodeInfosBuffer: Buffer[] = [];
+          if (r.r.nodes.length % 26 !== 0) {
+            callbackfn(new Error(`Unable to parse compact node info`));
+            return;
+          }
+
+          // Split the response into individual unit
+          const total = r.r.nodes.length / 26;
+          const temp = Buffer.from(r.r.nodes, "binary");
+          for (let i = 0; i < total; i++) {
+            nodeInfosBuffer.push(temp.subarray(i * 26, (i + 1) * 26));
+            // console.log(nodeInfosBuffer[i]);
+          }
+
+          // Structure the response
+          const nodes: NodeInfo[] = [];
+          nodeInfosBuffer.forEach((buffer) => {
+            const id = buffer.subarray(0, 20);
+            const ip = buffer.subarray(20, 24);
+            const ipStr = `${ip[0]}.${ip[1]}.${ip[2]}.${ip[3]}`;
+            const port = buffer.subarray(24, 26);
+
+            const node: NodeInfo = {
+              id: id,
+              ip: ipStr,
+              port: port.readUInt16LE(0),
+            };
+
+            nodes.push(node);
+          });
+          callbackfn(null, nodes, rinfo);
+        });
       }
     });
   }

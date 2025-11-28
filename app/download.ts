@@ -59,14 +59,8 @@ export default function download(args: string[]) {
           return;
         }
         if (!request || !rinfo) return;
-        const r = request as {
-          ip?: string;
-          r: { id: string };
-          t: string;
-          y: string;
-        };
         const node: NodeInfo = {
-          id: Buffer.from(r.r.id, "binary"),
+          id: Buffer.from(request.r.id, "binary"),
           ip: rinfo.address,
           port: rinfo.port,
         };
@@ -76,98 +70,73 @@ export default function download(args: string[]) {
           })
         ) {
           console.log(`contact ${node.id} already saved ✔️`);
-        dht.BOOTSTRAP_NODE_LOADED = true;
+          dht.BOOTSTRAP_NODE_LOADED = true;
           return;
         }
         dht.routingTable.insert(node);
+        dht.BOOTSTRAP_NODE_LOADED = true;
         console.log(`contact ${node.id} saved ✔️`);
       });
     } catch (err: unknown) {
       if (err instanceof Error) console.log(err.message);
     }
   });
+
   const calledNodes: NodeInfo[] = [];
-  const checkerId = setInterval(() => {
-    if (!dht.BOOTSTRAP_NODE_LOADED) return;
-    // Run after bootstrap node is loaded
-    clearInterval(checkerId);
+  let nearest = dht.routingTable.findNearest(dht.ID, 40);
+  calledNodes.push(...nearest);
+  const fillHandler = (
+    err: Error | null,
+    nodes?: NodeInfo[],
+    rinfo?: RemoteInfo
+  ) => {
+    if (err) {
+      console.error(err);
+      return;
+    }
+    console.log(nodes);
+    console.log(rinfo);
+    if (!(nodes && rinfo)) return;
 
-    let nearest = dht.routingTable.findNearest(dht.ID, 10);
-    calledNodes.push(...nearest);
-    const fillHandler = (
-      err: Error | null,
-      request?: unknown,
-      rinfo?: RemoteInfo
-    ) => {
-      if (err) {
-        console.error(err);
-        return;
-      }
+    console.log(nodes);
+    console.log(rinfo);
 
-      const r = request as {
-        t: Buffer;
-        y: string;
-        r: { id: Buffer; nodes: string };
-      };
-      /**
-       * Response = {"t":"aa", "y":"r", "r": {"id":"0123456789abcdefghij", "nodes": "def456..."}}
-       */
-      // Check if buffer can be parsed
-      let nodeInfosBuffer: Buffer[] = [];
-      if (r.r.nodes.length % 26 !== 0) {
-        throw new Error(`Unable to parse compact node info`);
-      }
-
-      // Split the response into individual unit
-      const total = r.r.nodes.length / 26;
-      const temp = Buffer.from(r.r.nodes, "binary");
-      for (let i = 0; i < total; i++) {
-        nodeInfosBuffer.push(temp.subarray(i * 26, (i + 1) * 26));
-        // console.log(nodeInfosBuffer[i]);
-      }
-
-      // Structure the response
-      const nodes: NodeInfo[] = [];
-      nodeInfosBuffer.forEach((buffer) => {
-        const id = buffer.subarray(0, 20);
-        const ip = buffer.subarray(20, 24);
-        const ipStr = `${ip[0]}.${ip[1]}.${ip[2]}.${ip[3]}`;
-        const port = buffer.subarray(24, 26);
-
-        const node: NodeInfo = {
-          id: id,
-          ip: ipStr,
-          port: port.readUInt16LE(0),
-        };
-
-        nodes.push(node);
+    // Save the response
+    nodes.forEach((node) => {
+      const f = dht.routingTable.find((n) => {
+        return node.id.equals(n.id);
       });
-
-      // Save the response
-      nodes.forEach((node) => {
-        const f = dht.routingTable.find((n) => {
-          return node.id.equals(n.id);
-        });
-        if (f === null) {
-          dht.routingTable.insert(node);
-        }
-      });
-
-      // Repeat queary
-      let newNearestNode = dht.routingTable.findNearest(dht.ID, 10);
-      newNearestNode = newNearestNode.filter((nNNode: NodeInfo) => {
-        const found = calledNodes.find((cNode: NodeInfo) => {
-          return nNNode.id.equals(cNode.id);
-        });
-        if (found) return true;
-        else false;
-      });
-      if (newNearestNode.length === 0) {
-        dht.routingTable.save("./rt");
-        return;
+      if (f === null) {
+        dht.routingTable.insert(node);
       }
+    });
+
+    // Repeat queary
+    let newNearestNode = dht.routingTable.findNearest(dht.ID, 40);
+
+    // Filter already queried node
+    newNearestNode = newNearestNode.filter((nNNode: NodeInfo) => {
+      const found = calledNodes.find((cNode: NodeInfo) => {
+        return nNNode.id.equals(cNode.id);
+      });
+      if (found) return true;
+      else false;
+    });
+    calledNodes.push(...newNearestNode);
+
+    if (newNearestNode.length !== 0) {
       dht.fill(newNearestNode, dht.ID, fillHandler);
-    };
-     dht.fill(nearest, dht.ID, fillHandler);
-  }, 10000);
+      return;
+    }
+
+    dht.routingTable.save("./rt");
+    console.log(`saved!`);
+  };
+
+  const interval = setInterval(() => {
+    if (dht.BOOTSTRAP_NODE_LOADED) clearInterval(interval);
+    else return;
+    if (loadedNodes > 100) return;
+    dht.fill(nearest, dht.ID, fillHandler);
+  }, 2000);
 }
