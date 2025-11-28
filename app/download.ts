@@ -2,7 +2,7 @@ import fs from "fs";
 
 import type {} from "./types";
 import Torrent from "./Torrent";
-import DHT from "./DHT";
+import DHT, { RoutingTable } from "./DHT";
 import type { NodeInfo } from "./DHT";
 import type { RemoteInfo } from "dgram";
 
@@ -46,7 +46,9 @@ export default function download(args: string[]) {
   dht.setBootstrap("dht.transmissionbt.com", 6881);
   dht.setBootstrap("router.bitcomet.com", 6881);
   dht.setBootstrap("dht.aelitis.com", 6881);
-  dht.routingTable.load("./rt");
+  const loadedNodes = dht.routingTable.load("./rt");
+  console.log(`Loaded nodes: ${loadedNodes}`);
+
   dht.initialie();
   dht.listen((err) => {
     try {

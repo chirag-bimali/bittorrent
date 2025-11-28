@@ -222,7 +222,7 @@ export class RoutingTable {
     fs.writeFileSync(fd, encoded, { encoding: "binary" });
     fs.closeSync(fd);
   }
-  load(path: string) {
+  load(path: string): number {
     const fd = fs.openSync(path, "r+");
     const encoded = fs.readFileSync(fd, { encoding: "binary" });
     const [datas, total] = BencodeDecoder.decodeBencodeList(encoded);
@@ -236,10 +236,11 @@ export class RoutingTable {
         return node;
       }
     );
-    console.log(nodes)
     nodes.forEach((node) => {
       this.insert(node);
     });
+    console.log(nodes)
+    return nodes.length
   }
 }
 export default class DHT {
