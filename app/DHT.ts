@@ -157,9 +157,12 @@ export class RoutingTable {
     const nodes: NodeInfo[] = [];
 
     let left: Buffer | null =
-      index === -1 || index - 1 <= 0 ? null : Bucket.bigintToBuffer(min - 1n);
+      index === -1 || index - 1 <= 0 || min - 1n < this.min
+        ? null
+        : Bucket.bigintToBuffer(min - 1n);
+
     let right: Buffer | null =
-      index === -1 || index + 1 >= this.buckets.length
+      index === -1 || index + 1 >= this.buckets.length || max + 1n > this.max
         ? null
         : Bucket.bigintToBuffer(max + 1n);
 
