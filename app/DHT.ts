@@ -205,6 +205,13 @@ export class RoutingTable {
 
     return nodes;
   }
+  size(): number {
+    let i = 0;
+    for (const bucket of this.buckets) {
+      i += bucket.nodes.length;
+    }
+    return i;
+  }
   delete(callBackfn: (node: NodeInfo) => boolean): NodeInfo[] | null {
     for (const bucket of this.buckets) {
       const node = bucket.delete(callBackfn);
@@ -225,6 +232,7 @@ export class RoutingTable {
   load(path: string): number {
     const fd = fs.openSync(path, "r+");
     const encoded = fs.readFileSync(fd, { encoding: "binary" });
+    if (encoded.length === 0) return 0;
     const [datas, total] = BencodeDecoder.decodeBencodeList(encoded);
     const nodes: NodeInfo[] = datas.map(
       (value: { id: string; ip: string; port: number }) => {
@@ -239,8 +247,8 @@ export class RoutingTable {
     nodes.forEach((node) => {
       this.insert(node);
     });
-    console.log(nodes)
-    return nodes.length
+    console.log(nodes);
+    return nodes.length;
   }
 }
 export default class DHT {
@@ -329,7 +337,7 @@ export default class DHT {
       err: Error | null,
       request?: {
         ip?: string;
-        r: { id: string };
+        r: { id: Buffer };
         t: string;
         y: string;
       },
@@ -358,7 +366,7 @@ export default class DHT {
       err: Error | null,
       request?: {
         ip?: string;
-        r: { id: string };
+        r: { id: Buffer };
         t: string;
         y: string;
       },
@@ -393,12 +401,12 @@ export default class DHT {
               (err, request?: any, rinfo?: RemoteInfo) => {
                 const response: {
                   ip?: string;
-                  r: { id: string };
+                  r: { id: Buffer };
                   t: string;
                   y: string;
                 } = {
                   ip: request.ip,
-                  r: { id: request?.r?.id },
+                  r: { id: Buffer.from(request?.r?.id, "binary") },
                   t: request.t,
                   y: request.t,
                 };
@@ -449,9 +457,7 @@ export default class DHT {
         console.log(`Connection failed to ${node.ip}:${node.port}`);
         callbackfn(err);
       } else {
-        console.log(`setting find_node responder`);
         this.RRTracker.set(txnId, (err, request?: any, rinfo?: RemoteInfo) => {
-          console.log(`find_node response incomming...`)
           if (err) {
             callbackfn(err);
             return;
@@ -586,6 +592,204 @@ export default class DHT {
       } else {
         this.RRTracker.set(txnId, callbackfn);
       }
+    });
+  }
+
+  pingBootstrapDefaultHandler = (
+    err: Error | null,
+    request?: {
+      ip?: string;
+      r: { id: Buffer };
+      t: string;
+      y: string;
+    },
+    rinfo?: RemoteInfo
+  ) => {
+    if (err) {
+      console.error(err.message);
+      return;
+    }
+    if (!request || !rinfo) return;
+    const node: NodeInfo = {
+      id: request.r.id,
+      ip: rinfo.address,
+      port: rinfo.port,
+    };
+    if (
+      this.routingTable.find((n) => {
+        return n.id.equals(node.id);
+      })
+    ) {
+      console.log(`contact ${node.id} already saved ✔️`);
+      this.BOOTSTRAP_NODE_LOADED = true;
+      this.routingTable.save("./rt");
+      return;
+    }
+    this.routingTable.insert(node);
+    this.routingTable.save("./rt");
+    this.BOOTSTRAP_NODE_LOADED = true;
+    console.log(`contact ${node.id} saved ✔️`);
+  };
+
+  start() {
+    this.listen((err) => {
+      try {
+        if (err) {
+          console.error(err);
+        }
+        console.log(`Listening on ${this.HOST}:${this.PORT}`);
+        this.pingBootstrap(this.pingBootstrapDefaultHandler);
+      } catch (err: unknown) {
+        if (err instanceof Error) console.error(err);
+      }
+    });
+
+    const calledNodes: NodeInfo[] = [];
+    const fillHandler = (
+      err: Error | null,
+      nodes?: NodeInfo[],
+      rinfo?: RemoteInfo
+    ) => {
+      if (err) {
+        console.error(err);
+        return;
+      }
+      if (!(nodes && rinfo)) return;
+
+      // Save the response
+      nodes.forEach((node) => {
+        const f = this.routingTable.find((n) => {
+          return node.id.equals(n.id);
+        });
+        if (f === null) {
+          this.routingTable.insert(node);
+        }
+      });
+
+      // Repeat: find nearest
+      let newNearestNode = this.routingTable.findNearest(this.ID, 40);
+
+      // Filter already queried node
+      newNearestNode = newNearestNode.filter((nNNode: NodeInfo) => {
+        const found = calledNodes.find((cNode: NodeInfo) => {
+          return nNNode.id.equals(cNode.id);
+        });
+        if (found) return true;
+        else false;
+      });
+      calledNodes.push(...newNearestNode);
+
+      // If new nodes then query
+      if (newNearestNode.length !== 0) {
+        this.fill(newNearestNode, this.ID, fillHandler);
+        return;
+      }
+
+      // Save table after completion
+      this.routingTable.save("./rt");
+
+      console.log(`saved!`);
+      console.log(`total nodes: ${this.routingTable.size()}`);
+    };
+    const loadedNodes = this.routingTable.load("./rt");
+    let nearest = this.routingTable.findNearest(this.ID, 40);
+    calledNodes.push(...nearest);
+
+    // 1. check every few seconds
+    // 2. if node is bootstrapped or more than one node loaded then clear the interval
+    // 3. if there are less then 100 nodes loaded from memory start filling up the table
+    const loadInterval = setInterval(() => {
+      if (this.BOOTSTRAP_NODE_LOADED || loadedNodes > 0)
+        clearInterval(loadInterval);
+      else return;
+      if (loadedNodes > 100) return;
+      this.fill(nearest, this.ID, fillHandler);
+    }, 2000);
+    const pingInterval = setInterval(() => {
+      this.pingPeers();
+      clearInterval(pingInterval);
+    }, 5000);
+
+    // }, 2);
+  }
+  pingPeers(
+    callbackfn?: (
+      err: Error | null,
+      request?: {
+        ip?: string;
+        r: { id: Buffer };
+        t: string;
+        y: string;
+      },
+      rinfo?: dgram.RemoteInfo
+    ) => void
+  ) {
+    const fifteenMin = 90000;
+    const twentyMin = 120000;
+    const now = Date.now();
+    for (const bucket of this.routingTable.buckets) {
+      for (const node of bucket.nodes) {
+        console.log(`Pinged ${node.ip}`);
+        if (callbackfn) {
+          this.ping(node.ip, node.port, callbackfn);
+          return;
+        }
+        // 90,000 === 15 mins
+        if (
+          !node.lastseen ||
+          (now - node.lastseen.getTime() > fifteenMin &&
+            now - node.lastseen.getTime() < twentyMin)
+        ) {
+          this.ping(node.ip, node.port, (err, request?, rinfo?) => {
+            if (err) {
+              console.error(err);
+            }
+            if (!request || !rinfo) return;
+            if (node.id.equals(request.r.id)) node.lastseen = new Date();
+            this.routingTable.save("./rt");
+          });
+          return;
+        }
+        if (now - node.lastseen.getTime() > twentyMin) {
+          // ping again last
+          // create a settimeout
+          // start replacing this node
+          // search it in node buffer
+          // ping surrounding node with random id in that bucket range
+        }
+      }
+    }
+  }
+  discoverNewId(
+    bucket: Bucket,
+    bufferNode: NodeInfo[],
+    callbackfn?: (
+      err: Error | null,
+      request?: NodeInfo[],
+      rinfo?: dgram.RemoteInfo
+    ) => void
+  ) {
+    const random = bucket.min + (bucket.max - bucket.min) / 2n;
+    bucket.nodes.forEach((node) => {
+      if (callbackfn) {
+        this.findNode(Bucket.bigintToBuffer(random), node, callbackfn);
+        return;
+      }
+      this.findNode(
+        Bucket.bigintToBuffer(random),
+        node,
+        (err: Error | null, request?: NodeInfo[], rinfo?: dgram.RemoteInfo) => {
+          if (err) {
+            console.error(err);
+            return;
+          }
+          for (const item of request ? request : ([] as NodeInfo[])) {
+            const node = bufferNode.find((node) => node.id.equals(item.id));
+            if (!node) continue;
+            bufferNode.push(node);
+          }
+        }
+      );
     });
   }
 }

@@ -177,6 +177,8 @@ async function main() {
       case "download":
         download(args.slice(3));
         break;
+      case "dht":
+        // code
       default:
         throw new Error(`No option available`);
         break;
